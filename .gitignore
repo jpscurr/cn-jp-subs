@@ -1,4 +1,7 @@
+# API 密钥就存在这里，绝不提交
 config.json
+config.local.json
+.env
 __pycache__/
 *.pyc
 *.srt
