@@ -1,4 +1,5 @@
 """离线自检 —— 不联网，也不需要 API 密钥。"""
+import pathlib
 import sys
 from cnsubs import config, languages, srt, text as T, pipeline
 
@@ -94,7 +95,7 @@ check("时间戳格式", srt.format_timestamp(3661.5) == "01:01:01,500", srt.for
 check("时间戳进位", srt.format_timestamp(0.9999) == "00:00:01,000", srt.format_timestamp(0.9999))
 
 print("\n-- 组装字幕 --")
-cfg = config.active({**config.DEFAULTS, "reading": True})
+cfg = config.active({**config.DEFAULTS, "language": "zh", "reading": True})
 segments = [
     {"start": 0.0, "end": 2.0, "text": "我 們 好"},
     {"start": 2.0, "end": 4.0, "text": "謝謝觀看"},          # 幻觉
@@ -133,7 +134,9 @@ check("中文字幕轨道", "zh-Hans" in A(language="zh")["sub_codes"])
 check("输出目录相互独立", A(language="zh")["output_dir"] != A(language="ja")["output_dir"],
       (A(language="zh")["output_dir"], A(language="ja")["output_dir"]))
 check("日文每行字数", A(language="ja")["max_chars_per_line"] == 24)
-check("未知语言回退", A(language="xx")["whisper_language"] == "zh")
+check("默认语言是日文", languages.DEFAULT_LANGUAGE == "ja", languages.DEFAULT_LANGUAGE)
+check("空白设置默认日文", A()["whisper_language"] == "ja", A()["language"])
+check("未知语言回退到默认", A(language="xx")["whisper_language"] == "ja")
 
 per_lang = config.active({**config.DEFAULTS,
                           "language": "ja",
@@ -147,6 +150,30 @@ check("旧目录迁移到中文下", migrated["languages"]["zh"]["output_dir"] =
 check("pinyin 迁移为 reading", migrated.get("reading") is True, migrated)
 check("旧键已清除", "output_dir" not in migrated, migrated)
 check("重复迁移不变", config._migrate(migrated) == migrated)
+
+# 密钥必须扛得住换语言、扛得住界面把占位符原样送回来。用临时文件试，
+# 不去碰真的 config.json。
+print("\n-- 密钥不会丢 --")
+import tempfile
+_real_config = config.CONFIG_FILE
+with tempfile.TemporaryDirectory() as _tmp:
+    config.CONFIG_FILE = pathlib.Path(_tmp) / "config.json"
+    config.save({**config.DEFAULTS, "api_key": "gsk_real", "language": "ja"})
+    check("先存下密钥", config.load()["api_key"] == "gsk_real")
+
+    config.save({**config.load(), "language": "zh"})       # 换语言
+    check("换语言后仍在", config.load()["api_key"] == "gsk_real", config.load()["api_key"])
+
+    config.save({**config.load(), "api_key": config.KEY_PLACEHOLDER})
+    check("占位符不会覆盖", config.load()["api_key"] == "gsk_real", config.load()["api_key"])
+
+    config.save({**config.load(), "api_key": ""})
+    check("空值不会覆盖", config.load()["api_key"] == "gsk_real", config.load()["api_key"])
+
+    config.save({**config.load(), "api_key": "gsk_new"})
+    check("真换密钥才生效", config.load()["api_key"] == "gsk_new", config.load()["api_key"])
+    check("存盘是原子的", not (pathlib.Path(_tmp) / "config.json.tmp").exists())
+config.CONFIG_FILE = _real_config
 
 print("\n-- 链接识别 --")
 good = [

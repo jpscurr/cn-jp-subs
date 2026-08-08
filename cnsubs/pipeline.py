@@ -67,7 +67,7 @@ def expand(url: str) -> list[dict]:
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
     if not info:
-        raise RuntimeError("yt-dlp 读不出这个链接")
+        raise RuntimeError("yt-dlp could not read that link")
 
     if info.get("_type") == "playlist":
         videos = []
@@ -104,12 +104,12 @@ def fetch_existing_subs(url: str, info: dict, work: Path, cfg: dict, log) -> lis
 
     use_auto = False
     if manual_hit:
-        log(f"[+] 找到上传者字幕：{', '.join(manual_hit)}")
+        log(f"[+] Found uploader subtitles: {', '.join(manual_hit)}")
     elif auto_hit and cfg.get("allow_auto_subs"):
-        log(f"[+] 找到自动生成的字幕：{', '.join(auto_hit)}")
+        log(f"[+] Found auto-generated subtitles: {', '.join(auto_hit)}")
         use_auto = True
     else:
-        log(f"[+] 这个视频没有可用的{cfg.get('language_name', '目标语言')}字幕。")
+        log(f"[+] No {cfg.get('language_name', 'target-language')} subtitles available on this video.")
         return None
 
     opts = {
@@ -125,7 +125,7 @@ def fetch_existing_subs(url: str, info: dict, work: Path, cfg: dict, log) -> lis
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([url])
     except Exception as exc:
-        log(f"[!] 字幕下载失败（{exc}），改用语音转写。")
+        log(f"[!] Subtitle download failed ({exc}); transcribing the audio instead.")
         return None
 
     for code in (manual_hit or auto_hit):
@@ -134,9 +134,9 @@ def fetch_existing_subs(url: str, info: dict, work: Path, cfg: dict, log) -> lis
             if candidate.exists() and candidate.stat().st_size > 0:
                 cues = srt.parse(candidate.read_text(encoding="utf-8", errors="ignore"))
                 if cues:
-                    log(f"[+] 从 {code} 轨道读到 {len(cues)} 条字幕。")
+                    log(f"[+] Read {len(cues)} cues from the {code} track.")
                     return cues
-    log("[!] 下载到的字幕文件是空的，改用语音转写。")
+    log("[!] The downloaded subtitle file was empty; transcribing the audio instead.")
     return None
 
 
@@ -156,7 +156,7 @@ def download_audio(url: str, work: Path, log) -> Path:
         pct = int(status.get("downloaded_bytes", 0) / total * 100)
         if pct >= state["pct"] + 10:
             state["pct"] = pct
-            log(f"    音频下载中 {pct}%")
+            log(f"    Downloading audio {pct}%")
 
     opts = {
         "format": "ba/ba*/b",
@@ -178,7 +178,7 @@ def download_audio(url: str, work: Path, log) -> Path:
     if not audio.exists():
         found = next((p for p in work.glob("audio.*") if p.suffix != ".part"), None)
         if not found:
-            raise RuntimeError("音频下载没有生成文件")
+            raise RuntimeError("The audio download produced no file")
         audio = found
     return audio
 
@@ -205,14 +205,14 @@ def split_audio(audio: Path, work: Path, chunk_seconds: int, log) -> list[tuple[
 
     parts = sorted(parts_dir.glob("part_*.mp3"))
     if not parts:
-        log("[!] 切割失败，整个文件一次性发送。")
+        log("[!] Splitting failed; sending the whole file in one go.")
         return [(audio, 0.0)]
 
     chunks, offset = [], 0.0
     for part in parts:
         chunks.append((part, offset))
         offset += probe_duration(part)
-    log(f"[+] 已切成 {len(chunks)} 段，每段约 {chunk_seconds // 60} 分钟。")
+    log(f"[+] Split into {len(chunks)} chunks of about {chunk_seconds // 60} minutes each.")
     return chunks
 
 
@@ -237,7 +237,7 @@ def transcribe_chunk(client, path: Path, cfg: dict, log, retries: int = 4) -> li
             if attempt == retries:
                 raise
             wait = min(2 ** attempt, 30)
-            log(f"    [!] {type(exc).__name__}: {exc} —— {wait} 秒后重试（第 {attempt}/{retries - 1} 次）")
+            log(f"    [!] {type(exc).__name__}: {exc} - retrying in {wait}s ({attempt}/{retries - 1})")
             time.sleep(wait)
     return []
 
@@ -252,7 +252,7 @@ def transcribe_all(client, chunks, cfg, log, should_stop) -> list[dict]:
             raise Cancelled()
         segments = transcribe_chunk(client, chunk, cfg, log)
         done["n"] += 1
-        log(f"    已转写 {done['n']}/{total}")
+        log(f"    Transcribed {done['n']}/{total}")
         return [{"start": float(s["start"]) + offset,
                  "end": float(s["end"]) + offset,
                  "text": s.get("text", "")} for s in segments]
@@ -261,7 +261,7 @@ def transcribe_all(client, chunks, cfg, log, should_stop) -> list[dict]:
     if workers == 1:
         results = [worker(item) for item in chunks]
     else:
-        log(f"[+] 共 {total} 段，每次同时转写 {workers} 段……")
+        log(f"[+] {total} chunks, transcribing {workers} at a time...")
         with ThreadPoolExecutor(max_workers=workers) as pool:
             results = list(pool.map(worker, chunks))
 
@@ -303,43 +303,43 @@ def process(url: str, cfg: dict, log=print, should_stop=lambda: False) -> dict:
         else:
             key = config.api_key(cfg)
             if not key:
-                raise RuntimeError("没有设置 Groq API 密钥。请在设置里填写，或设置环境变量 GROQ_API_KEY。")
+                raise RuntimeError("No Groq API key set. Add one in Settings, or set the GROQ_API_KEY environment variable.")
             client = Groq(api_key=key)
 
-            log("[+] 正在下载音频……")
+            log("[+] Downloading audio...")
             audio = download_audio(url, work, log)
             if should_stop():
                 raise Cancelled()
 
             chunks = split_audio(audio, work, int(cfg["chunk_seconds"]), log)
             segments = transcribe_all(client, chunks, cfg, log, should_stop)
-            log(f"[+] Whisper 返回 {len(segments)} 个原始片段。")
+            log(f"[+] Whisper returned {len(segments)} raw segments.")
 
         if should_stop():
             raise Cancelled()
 
         cues = srt.build(segments, cfg)
-        log(f"[+] 清洗后剩 {len(cues)} 条字幕。")
+        log(f"[+] {len(cues)} cues left after cleanup.")
 
         if cfg.get("translate") and cues:
             key = config.api_key(cfg)
             if key:
-                log("[+] 正在翻译……")
+                log("[+] Translating...")
                 client = Groq(api_key=key)
                 translations = translate_cues(
                     client, cues, cfg["translate_model"], log, should_stop,
-                    language=cfg.get("language_name", "中文"),
+                    language=cfg.get("language_name", "Chinese"),
                 )
                 for i, cue in enumerate(cues):
                     english = translations.get(i, "").strip()
                     if english:
                         cue["text"] += "\n" + english
             else:
-                log("[!] 没有 API 密钥，跳过翻译。")
+                log("[!] No API key; skipping translation.")
 
         dest = unique_path(out_dir / f"{safe_filename(title)}.srt")
         count = srt.write(cues, dest)
-        log(f"[✓] {count} 行 -> {dest}")
+        log(f"[✓] {count} lines -> {dest}")
         return {"title": title, "path": str(dest), "lines": count, "source": source,
                 "language": cfg.get("language", "zh")}
 

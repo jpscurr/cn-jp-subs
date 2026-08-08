@@ -6,6 +6,7 @@
 import json
 import os
 import queue
+import subprocess
 import sys
 import threading
 import time
@@ -85,7 +86,7 @@ def worker_loop() -> None:
                    title=result["title"], finished=time.time())
         except pipeline.Cancelled:
             update(job, status="cancelled", finished=time.time())
-            add_log(job, "[=] 已取消。")
+            add_log(job, "[=] Cancelled.")
         except Exception as exc:
             update(job, status="failed", error=f"{type(exc).__name__}: {exc}",
                    finished=time.time())
@@ -118,7 +119,7 @@ def style():
 def state():
     cfg = config.load()
     flat = config.active(cfg)
-    cfg["api_key"] = "set" if config.api_key(cfg) else ""
+    cfg["api_key"] = config.KEY_PLACEHOLDER if config.api_key(cfg) else ""
     flat.pop("api_key", None)
     with LOCK:
         jobs = [public(JOBS[i]) for i in ORDER if i in JOBS]
@@ -173,7 +174,7 @@ def create_jobs():
         m.group(0) for m in pipeline.URL_RE.finditer(raw if isinstance(raw, str) else "")
     ))
     if not urls:
-        return jsonify({"error": "这段文字里没有找到 YouTube 链接。"}), 400
+        return jsonify({"error": "No YouTube links found in that text."}), 400
 
     # 现在就把设置拍下快照，这样中途切换语言也不会把已经排队的任务
     # 改到另一个语言上去。
@@ -185,7 +186,7 @@ def create_jobs():
         try:
             videos = pipeline.expand(url)
         except Exception as exc:
-            return jsonify({"error": f"读不出 {url}：{exc}"}), 400
+            return jsonify({"error": f"Could not read {url}: {exc}"}), 400
         for video in videos:
             job = {
                 "id": uuid.uuid4().hex[:10],
@@ -212,7 +213,7 @@ def create_jobs():
 def cancel(job_id):
     job = JOBS.get(job_id)
     if not job:
-        return jsonify({"error": "没有这个任务"}), 404
+        return jsonify({"error": "No such job"}), 404
     job["cancel"].set()
     if job["status"] == "queued":
         update(job, status="cancelled")
@@ -237,8 +238,11 @@ def settings():
     for key, value in body.items():
         if key not in config.SHARED_DEFAULTS:
             continue
-        if key == "api_key" and value in ("", "set"):
-            continue                       # 留空表示"保持原样"
+        if key == "api_key":
+            # 留空、或者原样送回界面上那个占位符，都表示"保持原样"。
+            if not isinstance(value, str) or value.strip() in ("", config.KEY_PLACEHOLDER):
+                continue
+            value = value.strip()
         if key == "language" and value not in languages.codes():
             continue
         cfg[key] = value
@@ -253,7 +257,7 @@ def settings():
 
     config.save(cfg)
     safe = dict(cfg)
-    safe["api_key"] = "set" if config.api_key(cfg) else ""
+    safe["api_key"] = config.KEY_PLACEHOLDER if config.api_key(cfg) else ""
     flat = config.active(cfg)
     flat.pop("api_key", None)
     return jsonify({"config": safe, "active": flat})
@@ -263,7 +267,7 @@ def settings():
 def models():
     key = config.api_key()
     if not key:
-        return jsonify({"whisper": [], "chat": [], "error": "没有密钥"})
+        return jsonify({"whisper": [], "chat": [], "error": "No API key"})
     try:
         from groq import Groq
         listed = Groq(api_key=key).models.list().data
@@ -297,7 +301,7 @@ def file_preview():
     out = active_output_dir()
     path = out / name
     if not path.exists() or path.suffix.lower() != ".srt":
-        return jsonify({"error": "找不到文件"}), 404
+        return jsonify({"error": "File not found"}), 404
     cues = srt.parse(path.read_text(encoding="utf-8", errors="ignore"))
     return jsonify({"name": name, "path": str(path), "cues": cues[:2000]})
 
@@ -305,24 +309,35 @@ def file_preview():
 @app.post("/api/reveal")
 def reveal():
     out = active_output_dir()
-    out.mkdir(parents=True, exist_ok=True)
     try:
-        if sys.platform == "win32":
-            os.startfile(out)
-        else:
-            os.system(f'xdg-open "{out}"')
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
-    return jsonify({"ok": True})
+        out.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return jsonify({"error": f"Could not create {out}: {exc}"}), 500
+
+    # 这个请求跑在 Flask 的工作线程上，那里没人初始化过 COM，os.startfile
+    # 走的 ShellExecuteW 因此可能直接不响应。改成起一个 explorer 进程，
+    # 跟线程无关，稳当得多。（explorer 成功时也会返回 1，别去判它的退出码。）
+    if sys.platform == "win32":
+        launcher = ["explorer", str(out)]
+    elif sys.platform == "darwin":
+        launcher = ["open", str(out)]
+    else:
+        launcher = ["xdg-open", str(out)]
+
+    try:
+        subprocess.Popen(launcher, close_fds=True)
+    except (OSError, ValueError) as exc:
+        return jsonify({"error": f"Could not open {out}: {exc}"}), 500
+    return jsonify({"ok": True, "path": str(out)})
 
 
 def main():
     missing = pipeline.missing_dependencies()
     if missing:
-        print(f"[!] 这些没在 PATH 里：{', '.join(missing)} —— 语音转写会失败。")
+        print(f"[!] Not on PATH: {', '.join(missing)} - transcription will fail.")
     url = f"http://{HOST}:{PORT}"
-    print(f"\n  字幕生成器已启动：{url}")
-    print("  按 Ctrl+C 停止。\n")
+    print(f"\n  Subtitle generator running at {url}")
+    print("  Press Ctrl+C to stop.\n")
     threading.Timer(1.0, lambda: webbrowser.open(url)).start()
     app.run(host=HOST, port=PORT, threaded=True, debug=False)
 

@@ -1,43 +1,107 @@
 <!doctype html>
-<html lang="zh-Hans">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>字幕生成器</title>
+  <title>Subtitle Generator</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>字</text></svg>">
 </head>
 <body>
 
-<header class="topbar">
+<aside class="rail">
   <div class="brand">
     <span class="glyph" id="brand-glyph">字</span>
-    <div>
-      <h1>字幕生成器</h1>
-      <p id="brand-sub">给 asbplayer 用的字幕</p>
+    <div class="brand-text">
+      <h1>Subtitles</h1>
+      <p id="brand-sub">for asbplayer</p>
     </div>
   </div>
-  <div class="langs" id="langs" role="group" aria-label="语言"></div>
-  <div class="health" id="health"></div>
-  <button class="ghost" id="settings-open">设置</button>
-</header>
+
+  <nav class="langs" id="langs" role="group" aria-label="Subtitle language"></nav>
+
+  <div class="rail-stats">
+    <div class="tag tag-word" data-tag="stats">【统计】</div>
+    <dl class="stats">
+      <div><dt>Files</dt><dd id="stat-files">0</dd></div>
+      <div><dt>Lines</dt><dd id="stat-lines">0</dd></div>
+      <div><dt>Session</dt><dd id="stat-session">0</dd></div>
+    </dl>
+  </div>
+
+  <div class="rail-foot">
+    <div class="health" id="health"></div>
+    <div class="rail-buttons">
+      <button class="ghost" id="settings-open">Settings</button>
+      <button class="ghost icon" id="help-open" title="Keyboard shortcuts (?)">?</button>
+    </div>
+    <div class="rail-clock"><span id="rail-clock">--:--</span><span id="rail-session"></span></div>
+  </div>
+
+  <!-- 竹林里的熊猫。纯装饰，但可以点。 -->
+  <div class="grove" id="grove">
+    <div class="stalk s1"><i></i><i></i><i></i></div>
+    <div class="stalk s2"><i></i><i></i></div>
+    <div class="stalk s3"><i></i><i></i><i></i></div>
+
+    <div class="bubble" id="panda-bubble" hidden>
+      <span class="bubble-han" id="bubble-han"></span>
+      <span class="bubble-pin" id="bubble-pin"></span>
+      <span class="bubble-en" id="bubble-en"></span>
+    </div>
+
+    <button class="panda" id="panda" aria-label="Panda">
+      <svg viewBox="0 0 120 116" xmlns="http://www.w3.org/2000/svg">
+        <g class="p-body">
+          <ellipse class="p-ear" cx="26" cy="26" rx="15" ry="15"/>
+          <ellipse class="p-ear" cx="94" cy="26" rx="15" ry="15"/>
+          <ellipse class="p-ear-in" cx="26" cy="26" rx="7" ry="7"/>
+          <ellipse class="p-ear-in" cx="94" cy="26" rx="7" ry="7"/>
+          <ellipse class="p-head" cx="60" cy="58" rx="46" ry="41"/>
+          <g class="p-patch">
+            <ellipse cx="40" cy="54" rx="13" ry="16" transform="rotate(-14 40 54)"/>
+            <ellipse cx="80" cy="54" rx="13" ry="16" transform="rotate(14 80 54)"/>
+          </g>
+          <g class="p-eyes">
+            <circle cx="41" cy="56" r="4.6"/>
+            <circle cx="79" cy="56" r="4.6"/>
+          </g>
+          <g class="p-shine">
+            <circle cx="42.6" cy="54.2" r="1.5"/>
+            <circle cx="80.6" cy="54.2" r="1.5"/>
+          </g>
+          <ellipse class="p-nose" cx="60" cy="70" rx="5.4" ry="4"/>
+          <path class="p-mouth" d="M60 74 q-6 7 -12 2 M60 74 q6 7 12 2"/>
+          <g class="p-zzz">
+            <text x="94" y="24" class="z1">Z</text>
+            <text x="105" y="12" class="z2">z</text>
+          </g>
+        </g>
+      </svg>
+    </button>
+  </div>
+</aside>
 
 <main>
   <section class="card compose">
-    <label class="field-label" for="urls">YouTube 链接</label>
+    <div class="card-head">
+      <div class="tag tag-sentence" data-tag="links">【链接】</div>
+      <span class="link-count" id="link-count"></span>
+    </div>
+
     <textarea id="urls" rows="3" spellcheck="false"
-      placeholder="粘贴一个或多个 YouTube 链接，播放列表也可以。按 Ctrl+Enter 开始。"></textarea>
+      placeholder="Paste one or more YouTube links — playlists work too. Ctrl+Enter to start."></textarea>
 
     <div class="compose-row">
       <div class="toggles">
-        <label class="chk"><input type="checkbox" id="opt-existing"> <span>优先用视频自带字幕</span></label>
-        <label class="chk"><input type="checkbox" id="opt-auto"> <span>接受自动生成的字幕</span></label>
-        <label class="chk"><input type="checkbox" id="opt-reading"> <span id="opt-reading-label">拼音行</span></label>
-        <label class="chk"><input type="checkbox" id="opt-translate"> <span>英文行</span></label>
+        <label class="chk"><input type="checkbox" id="opt-existing"> <span>Prefer the video's own subtitles</span></label>
+        <label class="chk"><input type="checkbox" id="opt-auto"> <span>Accept auto-generated subtitles</span></label>
+        <label class="chk"><input type="checkbox" id="opt-reading"> <span id="opt-reading-label">Pinyin line</span></label>
+        <label class="chk"><input type="checkbox" id="opt-translate"> <span>English line</span></label>
       </div>
       <div class="compose-actions">
-        <select id="opt-model" class="mini" title="Whisper 模型"></select>
-        <button class="primary" id="go">开始生成</button>
+        <select id="opt-model" class="mini" title="Whisper model"></select>
+        <button class="primary" id="go">Generate</button>
       </div>
     </div>
     <p class="hint" id="compose-hint"></p>
@@ -46,31 +110,45 @@
   <div class="columns">
     <section class="card queue-card">
       <div class="card-head">
-        <h2>队列</h2>
-        <button class="ghost small" id="clear-done">清除已完成</button>
+        <div class="tag tag-definition" data-tag="queue">【队列】</div>
+        <button class="ghost small" id="clear-done">Clear finished</button>
       </div>
       <div id="queue" class="queue"></div>
-      <p class="empty" id="queue-empty">队列里还什么都没有。</p>
+      <p class="empty" id="queue-empty">Nothing in the queue yet.</p>
     </section>
 
     <section class="card files-card">
       <div class="card-head">
-        <h2>输出</h2>
-        <button class="ghost small" id="open-folder">打开文件夹</button>
+        <div class="tag tag-translation" data-tag="output">【输出】</div>
+        <button class="ghost small" id="open-folder">Open folder</button>
       </div>
+      <input type="text" id="file-search" class="search" placeholder="Filter files..." spellcheck="false">
       <ul id="files" class="files"></ul>
-      <p class="empty" id="files-empty">还没有生成任何字幕文件。</p>
+      <p class="empty" id="files-empty">No subtitle files yet.</p>
     </section>
   </div>
 </main>
 
 <div class="overlay" id="preview-overlay" hidden>
-  <div class="sheet">
+  <div class="sheet wide-sheet">
     <div class="sheet-head">
-      <h2 id="preview-title">预览</h2>
-      <button class="ghost small" id="preview-close">关闭</button>
+      <div class="tag tag-word" data-tag="preview">【字幕】</div>
+      <h2 id="preview-title">Preview</h2>
+      <button class="ghost small" id="preview-close">Close</button>
     </div>
     <p class="path" id="preview-path"></p>
+
+    <div class="cue-toolbar">
+      <input type="text" id="cue-search" class="search" placeholder="Search inside the subtitles..." spellcheck="false">
+      <div class="cue-tools">
+        <button class="ghost small toggle on" id="toggle-reading" title="Show the reading line">拼音</button>
+        <button class="ghost small toggle on" id="toggle-trans" title="Show the translation line">EN</button>
+        <button class="ghost small toggle" id="toggle-study" title="Hide everything but the original — test yourself">Study</button>
+        <button class="ghost small" id="cue-copy">Copy all</button>
+        <button class="ghost small" id="cue-download">Download</button>
+      </div>
+    </div>
+    <p class="cue-count" id="cue-count"></p>
     <div class="cues" id="preview-cues"></div>
   </div>
 </div>
@@ -78,59 +156,83 @@
 <div class="overlay" id="settings-overlay" hidden>
   <div class="sheet">
     <div class="sheet-head">
-      <h2>设置</h2>
-      <button class="ghost small" id="settings-close">关闭</button>
+      <div class="tag tag-diagram" data-tag="settings">【设置】</div>
+      <h2>Settings</h2>
+      <button class="ghost small" id="settings-close">Close</button>
     </div>
 
     <div class="settings-grid">
-      <label>Groq API 密钥
-        <input type="password" id="set-key" placeholder="留空则保持现有密钥" autocomplete="off">
+      <label>Groq API key
+        <input type="password" id="set-key" placeholder="Leave blank to keep the current key" autocomplete="off">
         <small id="key-note"></small>
       </label>
-      <label>并发上传数
+      <label>Parallel uploads
         <input type="number" id="set-parallel" min="1" max="8">
-        <small>同时进行的转写请求数。想快就调大，遇到限流就调小。</small>
+        <small>Transcription requests in flight at once. Raise it for speed, lower it if you hit rate limits.</small>
       </label>
-      <label class="wide">输出目录 <em id="set-out-lang"></em>
+      <label class="wide">Output folder <em id="set-out-lang"></em>
         <input type="text" id="set-out">
-        <small>每种语言各有各的目录，视频不会混在一起。</small>
+        <small>Each language has its own folder, so videos never end up mixed together.</small>
       </label>
-      <label>Whisper 模型
+      <label>Whisper model
         <select id="set-model"></select>
-        <small>large-v3 更准；turbo 快约四倍、也更便宜。</small>
+        <small>large-v3 is more accurate; turbo is about four times faster and cheaper.</small>
       </label>
-      <label>翻译模型
+      <label>Translation model
         <select id="set-translate-model"></select>
       </label>
-      <label id="row-variant">字形
+      <label id="row-variant">Character set
         <select id="set-variant">
-          <option value="s">简体</option>
-          <option value="t">繁體</option>
-          <option value="">保持原样</option>
+          <option value="s">Simplified</option>
+          <option value="t">Traditional</option>
+          <option value="">Leave as-is</option>
         </select>
       </label>
-      <label id="row-reading-style">注音方式
+      <label id="row-reading-style">Reading style
         <select id="set-reading-style"></select>
       </label>
-      <label>每行最多字数
+      <label>Max characters per line
         <input type="number" id="set-chars" min="10" max="60">
       </label>
-      <label>每段长度（秒）
+      <label>Chunk length (seconds)
         <input type="number" id="set-chunk" min="120" max="1500" step="60">
-        <small>每次请求发送的音频长度。上传老是超时就调小。</small>
+        <small>How much audio goes in each request. Lower it if uploads keep timing out.</small>
       </label>
-      <label class="wide">Whisper 提示词 <em id="set-prompt-lang"></em>
+      <label class="wide">Whisper prompt <em id="set-prompt-lang"></em>
         <textarea id="set-prompt" rows="2"></textarea>
-        <small>引导转写走向正确的语言，并使用正常标点。</small>
+        <small>Steers the transcription toward the right language and normal punctuation.</small>
       </label>
     </div>
 
     <div class="sheet-foot">
       <span class="hint" id="settings-hint"></span>
-      <button class="primary" id="settings-save">保存</button>
+      <button class="primary" id="settings-save">Save</button>
     </div>
   </div>
 </div>
+
+<div class="overlay" id="help-overlay" hidden>
+  <div class="sheet narrow-sheet">
+    <div class="sheet-head">
+      <div class="tag tag-image" data-tag="help">【快捷键】</div>
+      <h2>Shortcuts</h2>
+      <button class="ghost small" id="help-close">Close</button>
+    </div>
+    <ul class="keys">
+      <li><kbd>Ctrl</kbd><kbd>Enter</kbd><span>Generate from the links box</span></li>
+      <li><kbd>/</kbd><span>Jump to the links box</span></li>
+      <li><kbd>f</kbd><span>Filter the output files</span></li>
+      <li><kbd>g</kbd><span>Open the output folder</span></li>
+      <li><kbd>s</kbd><span>Settings</span></li>
+      <li><kbd>j</kbd> <kbd>k</kbd><span>Move through subtitles in the preview</span></li>
+      <li><kbd>Esc</kbd><span>Close whatever is open</span></li>
+      <li><kbd>?</kbd><span>This list</span></li>
+    </ul>
+    <p class="whisper">Click the panda. Keep clicking.</p>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
 
 <script src="/app.js"></script>
 </body>

@@ -24,19 +24,19 @@ from cnsubs import config, languages, pipeline
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cn.py", add_help=True,
-                                     description="为 asbplayer 生成中文和日文字幕。")
-    parser.add_argument("urls", nargs="*", help="YouTube 视频或播放列表链接")
-    parser.add_argument("--ui", action="store_true", help="启动网页界面")
-    parser.add_argument("--lang", choices=languages.codes(), help="目标语言")
+                                     description="Generate Japanese and Chinese subtitles for asbplayer.")
+    parser.add_argument("urls", nargs="*", help="YouTube video or playlist links")
+    parser.add_argument("--ui", action="store_true", help="launch the web interface")
+    parser.add_argument("--lang", choices=languages.codes(), help="target language")
     parser.add_argument("--reading", dest="reading", action="store_true", default=None,
-                        help="每条字幕下加一行拼音／假名")
+                        help="add a pinyin/kana line under each subtitle")
     parser.add_argument("--no-reading", dest="reading", action="store_false")
     parser.add_argument("--translate", dest="translate", action="store_true", default=None,
-                        help="每条字幕下加一行英文")
+                        help="add an English line under each subtitle")
     parser.add_argument("--no-translate", dest="translate", action="store_false")
-    parser.add_argument("--model", help="whisper 模型名称")
-    parser.add_argument("--turbo", action="store_true", help="使用 whisper-large-v3-turbo")
-    parser.add_argument("--force", action="store_true", help="已处理过的链接也重新处理")
+    parser.add_argument("--model", help="whisper model name")
+    parser.add_argument("--turbo", action="store_true", help="use whisper-large-v3-turbo")
+    parser.add_argument("--force", action="store_true", help="reprocess links already handled")
     return parser
 
 
@@ -58,10 +58,10 @@ def resolve_config(args) -> dict:
 def preflight(cfg: dict) -> None:
     missing = pipeline.missing_dependencies()
     if missing:
-        sys.exit(f"[!] 这些没在 PATH 里：{', '.join(missing)}。请先装好 ffmpeg 再试。")
+        sys.exit(f"[!] Not on PATH: {', '.join(missing)}. Install ffmpeg and try again.")
     if not config.api_key(cfg):
-        print("[!] 没有 Groq API 密钥。请设置环境变量 GROQ_API_KEY，或用 python cn.py --ui 在界面里填。")
-        print("    视频本身自带字幕的话，不填密钥也能正常处理。\n")
+        print("[!] No Groq API key. Set GROQ_API_KEY, or run python cn.py --ui and enter one there.")
+        print("    Videos that already carry subtitles work fine without a key.\n")
 
 
 def run(url: str, cfg: dict) -> bool:
@@ -74,7 +74,7 @@ def run(url: str, cfg: dict) -> bool:
     ok = True
     for i, video in enumerate(videos, start=1):
         if len(videos) > 1:
-            print(f"\n--- 第 {i}/{len(videos)} 个 ---")
+            print(f"\n--- {i}/{len(videos)} ---")
         try:
             pipeline.process(video["url"], cfg)
         except Exception as exc:
@@ -109,12 +109,12 @@ def watch_clipboard(cfg: dict, force: bool) -> None:
     try:
         import pyperclip
     except ImportError:
-        sys.exit("没有安装 pyperclip。请运行：pip install pyperclip")
+        sys.exit("pyperclip is not installed. Run: pip install pyperclip")
 
     flat = config.active(cfg)
     seen = set() if force else load_seen(flat)
-    print(f"正在监听剪贴板 —— {flat['language_name']}。输出目录：{config.output_dir(flat)}")
-    print("复制一个 YouTube 链接就会开始生成字幕。按 Ctrl+C 停止。\n")
+    print(f"Watching the clipboard - {flat['language_name']}. Output folder: {config.output_dir(flat)}")
+    print("Copy a YouTube link and subtitles start generating. Press Ctrl+C to stop.\n")
 
     last = ""
     while True:
@@ -126,13 +126,13 @@ def watch_clipboard(cfg: dict, force: bool) -> None:
                 if match:
                     url = match.group(0)
                     if url in seen:
-                        print(f"[=] 已经处理过：{url}")
+                        print(f"[=] Already done: {url}")
                     elif run(url, cfg):
                         seen.add(url)
                         save_seen(config.active(cfg), seen)
             time.sleep(1)
         except KeyboardInterrupt:
-            print("\n已停止。")
+            print("\nStopped.")
             return
         except Exception as exc:
             print(f"[!] {exc}")

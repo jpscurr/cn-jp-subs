@@ -8,15 +8,32 @@ from pathlib import Path
 
 DOCS = Path.home() / "Documents"
 
+# 顺序即界面上语言按钮的顺序：日文排在前面，也是默认语言。
 LANGUAGES = {
+    "ja": {
+        "name": "Japanese",
+        "native": "日本語",
+        "whisper_language": "ja",
+        "sub_codes": ["ja", "ja-JP", "ja-Hira"],
+        "reading_label": "Kana",
+        "reading_styles": {"kana": "Hiragana", "romaji": "Rōmaji"},
+        "default_reading_style": "kana",
+        "has_script_variant": False,
+        "defaults": {
+            "output_dir": str(DOCS / "JapaneseSubs"),
+            "max_chars_per_line": 24,    # 日文字幕的常见上限
+            "reading_style": "kana",
+            "prompt": "以下は日本語の音声です。標準的な句読点を使って書き起こしてください。",
+        },
+    },
     "zh": {
-        "name": "中文",
+        "name": "Chinese",
         "native": "中文",
         "whisper_language": "zh",
         # 按优先级排列，视频上第一个存在的字幕轨道胜出。
         "sub_codes": ["zh-Hans", "zh-CN", "zh", "zh-Hant", "zh-TW", "zh-HK", "zh-SG", "yue"],
-        "reading_label": "拼音",
-        "reading_styles": {"pinyin": "拼音（声调符号）"},
+        "reading_label": "Pinyin",
+        "reading_styles": {"pinyin": "Pinyin (tone marks)"},
         "default_reading_style": "pinyin",
         "has_script_variant": True,      # 简体 <-> 繁体
         "defaults": {
@@ -27,25 +44,9 @@ LANGUAGES = {
             "prompt": "以下是普通话的句子，请使用简体中文和标准标点符号转写。",
         },
     },
-    "ja": {
-        "name": "日文",
-        "native": "日本語",
-        "whisper_language": "ja",
-        "sub_codes": ["ja", "ja-JP", "ja-Hira"],
-        "reading_label": "假名",
-        "reading_styles": {"kana": "平假名", "romaji": "罗马字"},
-        "default_reading_style": "kana",
-        "has_script_variant": False,
-        "defaults": {
-            "output_dir": str(DOCS / "JapaneseSubs"),
-            "max_chars_per_line": 24,    # 日文字幕的常见上限
-            "reading_style": "kana",
-            "prompt": "以下は日本語の音声です。標準的な句読点を使って書き起こしてください。",
-        },
-    },
 }
 
-DEFAULT_LANGUAGE = "zh"
+DEFAULT_LANGUAGE = "ja"
 
 
 def get(code: str) -> dict:

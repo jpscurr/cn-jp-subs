@@ -1,5 +1,7 @@
 # API 密钥就存在这里，绝不提交
 config.json
+config.json.tmp
+config.json.bad
 config.local.json
 .env
 __pycache__/

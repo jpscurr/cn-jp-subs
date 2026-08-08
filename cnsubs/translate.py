@@ -10,17 +10,18 @@ import re
 BATCH = 40
 
 SYSTEM = (
-    "你是字幕翻译。把下面的{language}字幕逐行翻译成自然的英文。"
-    "这些是同一个视频里按顺序排列的带编号的句子。"
-    "每一行都要翻译，编号保持不变，行数也保持不变。"
-    "每条译文都要能单独作为该行的字幕：不要合并行，不要加任何说明，不要写拼音或罗马字。"
-    "译文要简短、地道。"
-    '只输出 JSON，格式为 {{"1": "...", "2": "..."}}。'
+    "You are a subtitle translator. Translate the {language} subtitles below into "
+    "natural English, line by line. They are numbered sentences taken in order from "
+    "one video. Translate every line, keep the numbering unchanged, and return exactly "
+    "as many lines as you were given. Each translation must stand on its own as that "
+    "line's subtitle: do not merge lines, do not add commentary, and do not write "
+    "pinyin or romaji. Keep the English short and idiomatic. "
+    'Output JSON only, in the form {{"1": "...", "2": "..."}}.'
 )
 
 
 def translate_cues(client, cues: list[dict], model: str, log=print,
-                   should_stop=lambda: False, language: str = "中文") -> dict[int, str]:
+                   should_stop=lambda: False, language: str = "Chinese") -> dict[int, str]:
     out: dict[int, str] = {}
     total = len(cues)
     system = SYSTEM.format(language=language)
@@ -48,8 +49,8 @@ def translate_cues(client, cues: list[dict], model: str, log=print,
                 if index is not None and 0 <= index - 1 < len(chunk):
                     out[offset + index - 1] = str(value).strip()
         except Exception as exc:
-            log(f"    [!] 第 {offset // BATCH + 1} 批翻译失败：{exc}")
-        log(f"    已翻译 {min(offset + BATCH, total)}/{total} 行")
+            log(f"    [!] Batch {offset // BATCH + 1} failed to translate: {exc}")
+        log(f"    Translated {min(offset + BATCH, total)}/{total} lines")
     return out
 
 

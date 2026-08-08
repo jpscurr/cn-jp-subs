@@ -7,9 +7,50 @@ let active = {};     // 当前语言的设置，已压平
 let langs = [];      // 服务端给出的语言定义
 let models = { whisper: [], chat: [] };
 
+let allFiles = [];   // 未过滤的文件列表
+let cues = [];       // 当前预览的字幕
+let cueIndex = -1;   // j/k 选中的那一条
+let currentFile = "";
+let sessionCount = 0;
+let sessionStart = Date.now();
+
 const FALLBACK_WHISPER = ["whisper-large-v3", "whisper-large-v3-turbo"];
 const FALLBACK_CHAT = ["llama-3.3-70b-versatile", "qwen/qwen3-32b", "moonshotai/kimi-k2-instruct"];
+
+// 界面上那些方括号标签，跟着语言换。
+const TAGS = {
+  zh: { links: "【链接】", queue: "【队列】", output: "【输出】", preview: "【字幕】",
+        settings: "【设置】", help: "【快捷键】", stats: "【统计】" },
+  ja: { links: "【リンク】", queue: "【待ち】", output: "【出力】", preview: "【字幕】",
+        settings: "【設定】", help: "【ショートカット】", stats: "【統計】" },
+};
 const GLYPHS = { zh: "字", ja: "か" };
+
+// 熊猫说的话。点一下随机挑一句。
+const SAYINGS = {
+  zh: [
+    ["别摸我", "bié mō wǒ", "don't poke me"],
+    ["我在吃竹子", "wǒ zài chī zhúzi", "I'm eating bamboo"],
+    ["加油！", "jiāyóu", "keep going!"],
+    ["再看一集", "zài kàn yī jí", "one more episode"],
+    ["你今天学了吗", "nǐ jīntiān xué le ma", "did you study today?"],
+    ["慢慢来", "màn màn lái", "take it slow"],
+    ["困了", "kùn le", "I'm sleepy"],
+    ["好好休息", "hǎohāo xiūxi", "get some rest"],
+    ["熟能生巧", "shú néng shēng qiǎo", "practice makes perfect"],
+    ["再来一遍", "zài lái yī biàn", "one more time"],
+  ],
+  ja: [
+    ["さわらないで", "sawaranaide", "don't touch me"],
+    ["笹を食べてる", "sasa o tabeteru", "I'm eating bamboo"],
+    ["がんばって！", "ganbatte", "you got this!"],
+    ["もう一話だけ", "mō ichiwa dake", "just one more episode"],
+    ["今日は勉強した？", "kyō wa benkyō shita?", "did you study today?"],
+    ["ゆっくりでいいよ", "yukkuri de ii yo", "slow is fine"],
+    ["ねむい", "nemui", "sleepy"],
+    ["継続は力なり", "keizoku wa chikara nari", "persistence is strength"],
+  ],
+};
 
 // ---------------------------------------------------------------- 启动
 
@@ -20,39 +61,87 @@ async function init() {
   await refreshFiles();
   loadModels();
   connectStream();
+  wireUp();
+  startPanda();
+  startClock();
+}
 
+function wireUp() {
   $("go").onclick = submit;
   $("urls").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submit();
   });
+  $("urls").addEventListener("input", countLinks);
+
   $("clear-done").onclick = async () => {
     await fetch("/api/jobs/clear", { method: "POST" });
     await refreshState();
+    toast("Cleared finished jobs.");
   };
-  $("open-folder").onclick = () => fetch("/api/reveal", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
-  });
+  $("open-folder").onclick = openFolder;
+  $("file-search").addEventListener("input", renderFiles);
 
   $("settings-open").onclick = openSettings;
   $("settings-close").onclick = () => ($("settings-overlay").hidden = true);
   $("settings-save").onclick = saveSettings;
   $("preview-close").onclick = () => ($("preview-overlay").hidden = true);
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      $("settings-overlay").hidden = true;
-      $("preview-overlay").hidden = true;
-    }
-  });
+  $("help-open").onclick = () => ($("help-overlay").hidden = false);
+  $("help-close").onclick = () => ($("help-overlay").hidden = true);
+
+  $("cue-search").addEventListener("input", renderCues);
+  $("toggle-reading").onclick = () => toggleCueClass("toggle-reading", "no-reading");
+  $("toggle-trans").onclick = () => toggleCueClass("toggle-trans", "no-trans");
+  $("toggle-study").onclick = () => {
+    const on = $("toggle-study").classList.toggle("on");
+    $("preview-cues").classList.toggle("study", on);
+    if (on) toast("Study mode — hover a line to reveal it.", "gold");
+  };
+  $("cue-copy").onclick = copyAllCues;
+  $("cue-download").onclick = downloadCues;
+
+  document.addEventListener("keydown", shortcuts);
   for (const overlay of document.querySelectorAll(".overlay")) {
     overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.hidden = true; });
   }
 
-  // 这几个快捷开关直接写回保存的设置。
   for (const [id, key] of [["opt-existing", "prefer_existing_subs"], ["opt-auto", "allow_auto_subs"],
                            ["opt-reading", "reading"], ["opt-translate", "translate"]]) {
     $(id).onchange = () => patch({ [key]: $(id).checked });
   }
   $("opt-model").onchange = () => patch({ model: $("opt-model").value });
+
+  // 把链接拖到窗口里也能用
+  document.addEventListener("dragover", (e) => e.preventDefault());
+  document.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const text = e.dataTransfer.getData("text");
+    if (!text) return;
+    $("urls").value = ($("urls").value.trim() + "\n" + text).trim();
+    countLinks();
+    toast("Link dropped in.");
+  });
+}
+
+function shortcuts(e) {
+  if (e.key === "Escape") {
+    for (const o of document.querySelectorAll(".overlay")) o.hidden = true;
+    return;
+  }
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+  const previewOpen = !$("preview-overlay").hidden;
+
+  if (previewOpen && !typing && (e.key === "j" || e.key === "k")) {
+    e.preventDefault();
+    moveCue(e.key === "j" ? 1 : -1);
+    return;
+  }
+  if (typing) return;
+
+  if (e.key === "?" || (e.key === "/" && e.shiftKey)) { e.preventDefault(); $("help-overlay").hidden = false; }
+  else if (e.key === "/") { e.preventDefault(); $("urls").focus(); }
+  else if (e.key === "f") { e.preventDefault(); $("file-search").focus(); }
+  else if (e.key === "g") { e.preventDefault(); openFolder(); }
+  else if (e.key === "s") { e.preventDefault(); openSettings(); }
 }
 
 // ---------------------------------------------------------------- 状态
@@ -63,6 +152,7 @@ async function refreshState() {
   active = data.active;
   langs = data.languages;
   renderLanguages();
+  renderTags();
   renderHealth(data.env);
   applyConfigToControls();
   jobs.clear();
@@ -74,6 +164,19 @@ function currentLang() {
   return langs.find((l) => l.code === cfg.language) || langs[0] || {};
 }
 
+// 标签文字跟着语言换，换的时候闪一下。
+function renderTags() {
+  const set = TAGS[cfg.language] || TAGS.zh;
+  for (const node of document.querySelectorAll("[data-tag]")) {
+    const next = set[node.dataset.tag];
+    if (!next || node.textContent === next) continue;
+    node.textContent = next;
+    node.classList.remove("swap");
+    void node.offsetWidth;          // 重新触发动画
+    node.classList.add("swap");
+  }
+}
+
 function renderLanguages() {
   $("langs").innerHTML = langs.map((l) => `
     <button class="lang ${l.code === cfg.language ? "on" : ""}" data-lang="${esc(l.code)}"
@@ -81,13 +184,18 @@ function renderLanguages() {
       <span class="lang-native">${esc(l.native)}</span>
       <span class="lang-name">${esc(l.name)}</span>
     </button>`).join("");
-  for (const btn of $("langs").children) {
-    btn.onclick = () => switchLanguage(btn.dataset.lang);
-  }
+  for (const btn of $("langs").children) btn.onclick = () => switchLanguage(btn.dataset.lang);
+
   const lang = currentLang();
-  $("brand-glyph").textContent = GLYPHS[lang.code] || "字";
-  $("brand-sub").textContent = `给 asbplayer 用的${lang.name || ""}字幕`;
-  $("opt-reading-label").textContent = `${lang.reading_label || "注音"}行`;
+  const glyph = $("brand-glyph");
+  const next = GLYPHS[lang.code] || "字";
+  if (glyph.textContent !== next) {
+    glyph.classList.remove("flip"); void glyph.offsetWidth; glyph.classList.add("flip");
+  }
+  glyph.textContent = next;
+  $("brand-sub").textContent = `${lang.name || ""} subtitles for asbplayer`;
+  $("opt-reading-label").textContent = `${lang.reading_label || "Reading"} line`;
+  $("toggle-reading").textContent = lang.reading_label || "Reading";
 }
 
 async function switchLanguage(code) {
@@ -95,7 +203,8 @@ async function switchLanguage(code) {
   await patch({ language: code });
   await refreshState();
   await refreshFiles();
-  setHint(`已切换到${currentLang().name}，文件存到 ${active.output_dir}`);
+  setHint(`Switched to ${currentLang().name} — files go to ${active.output_dir}`);
+  speak();
 }
 
 function applyConfigToControls() {
@@ -104,6 +213,19 @@ function applyConfigToControls() {
   $("opt-reading").checked = !!cfg.reading;
   $("opt-translate").checked = !!cfg.translate;
   fillSelect($("opt-model"), models.whisper.length ? models.whisper : FALLBACK_WHISPER, cfg.model);
+}
+
+async function openFolder() {
+  try {
+    const res = await fetch("/api/reveal", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { setHint(data.error || "Could not open the output folder.", true); toast(data.error || "Could not open the folder.", "bad"); }
+    else toast(`Opened ${data.path || "the output folder"}.`);
+  } catch (err) {
+    setHint(String(err), true);
+  }
 }
 
 async function patch(fields) {
@@ -117,12 +239,12 @@ async function patch(fields) {
 
 function renderHealth(env) {
   const pills = [];
-  if (env.ffmpeg_missing.length) pills.push(["bad", `缺少 ${env.ffmpeg_missing.join("、")}`]);
+  if (env.ffmpeg_missing.length) pills.push(["bad", `${env.ffmpeg_missing.join(", ")} missing`]);
   else pills.push(["ok", "ffmpeg"]);
-  pills.push(cfg.api_key ? ["ok", env.key_from_env ? "密钥（环境变量）" : "密钥"] : ["bad", "没有密钥"]);
-  if (!env.reading_ok) pills.push(["warn", `缺少${currentLang().reading_label || "注音"}组件`]);
-  else if (cfg.language === "zh" && !env.segmenter) pills.push(["warn", "缺少 jieba"]);
-  if (cfg.language === "zh" && !env.opencc) pills.push(["warn", "缺少 opencc"]);
+  pills.push(cfg.api_key ? ["ok", env.key_from_env ? "key (env)" : "key"] : ["bad", "no key"]);
+  if (!env.reading_ok) pills.push(["warn", `${currentLang().reading_label || "reading"} support missing`]);
+  else if (cfg.language === "zh" && !env.segmenter) pills.push(["warn", "jieba missing"]);
+  if (cfg.language === "zh" && !env.opencc) pills.push(["warn", "opencc missing"]);
   $("health").innerHTML = pills
     .map(([kind, label]) => `<span class="pill ${kind}">${esc(label)}</span>`).join("");
 }
@@ -137,21 +259,28 @@ async function loadModels() {
 
 // ---------------------------------------------------------------- 提交
 
+function countLinks() {
+  const found = ($("urls").value.match(/https?:\/\/[^\s]+/g) || []).length;
+  $("link-count").textContent = found ? `${found} link${found > 1 ? "s" : ""}` : "";
+}
+
 async function submit() {
   const urls = $("urls").value.trim();
-  if (!urls) { setHint("先粘贴一个 YouTube 链接。", true); return; }
+  if (!urls) { setHint("Paste a YouTube link first.", true); shake($("urls")); return; }
 
   $("go").disabled = true;
-  setHint("正在读取链接……");
+  setHint("Reading the links...");
   try {
     const res = await fetch("/api/jobs", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ urls }),
     });
     const data = await res.json();
-    if (!res.ok) { setHint(data.error || "出了点问题。", true); return; }
+    if (!res.ok) { setHint(data.error || "Something went wrong.", true); toast(data.error || "Something went wrong.", "bad"); return; }
     $("urls").value = "";
-    setHint(`已加入 ${data.jobs.length} 个${currentLang().name}视频。`);
+    countLinks();
+    setHint(`Queued ${data.jobs.length} ${currentLang().name} video(s).`);
+    toast(`Queued ${data.jobs.length} video${data.jobs.length > 1 ? "s" : ""}.`);
     for (const job of data.jobs) jobs.set(job.id, job);
     renderQueue();
   } catch (err) {
@@ -167,6 +296,13 @@ function setHint(message, bad = false) {
   hint.classList.toggle("bad", bad);
 }
 
+function shake(node) {
+  node.animate(
+    [{ transform: "translateX(0)" }, { transform: "translateX(-6px)" },
+     { transform: "translateX(6px)" }, { transform: "translateX(0)" }],
+    { duration: 240, easing: "ease-in-out" });
+}
+
 // ---------------------------------------------------------------- 实时更新
 
 function connectStream() {
@@ -177,7 +313,16 @@ function connectStream() {
     job.log = job.log?.length ? job.log : previous?.log || [];
     jobs.set(job.id, job);
     renderQueue();
-    if (job.status === "done") refreshFiles();
+    if (job.status === "done" && previous?.status !== "done") {
+      refreshFiles();
+      sessionCount += 1;
+      bumpStat($("stat-session"), sessionCount);
+      toast(`Finished: ${job.title || "video"}`, "gold");
+      cheer();
+    }
+    if (job.status === "failed" && previous?.status !== "failed") {
+      toast(job.error || "A job failed.", "bad");
+    }
   });
   source.addEventListener("log", (e) => {
     const { id, line } = JSON.parse(e.data);
@@ -197,7 +342,10 @@ function renderQueue() {
   const container = $("queue");
   container.innerHTML = "";
 
+  let running = false;
+
   for (const job of list) {
+    if (job.status === "running") running = true;
     const node = document.createElement("div");
     node.className = "job";
     node.dataset.id = job.id;
@@ -210,9 +358,11 @@ function renderQueue() {
           ${esc(job.title || job.url)}
           <div class="job-sub">${statusLine(job)}</div>
         </div>
-        ${job.language ? `<span class="tag">${esc(langName(job.language))}</span>` : ""}
+        ${elapsed(job)}
+        ${job.language ? `<span class="pill">${esc(langName(job.language))}</span>` : ""}
         ${actionButtons(job)}
       </div>
+      ${job.status === "running" ? `<div class="job-bar"><i></i></div>` : ""}
       ${open ? `<div class="job-log" id="log-${job.id}"></div>` : ""}`;
 
     node.querySelector(".job-head").onclick = (e) => {
@@ -233,6 +383,16 @@ function renderQueue() {
       log.scrollTop = log.scrollHeight;
     }
   }
+
+  setPandaState(running ? "working" : "");
+}
+
+function elapsed(job) {
+  if (!job.started) return "";
+  const end = job.finished || Date.now() / 1000;
+  const secs = Math.max(0, Math.round(end - job.started));
+  const label = secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs}s`;
+  return `<span class="job-time">${label}</span>`;
 }
 
 function langName(code) {
@@ -241,23 +401,20 @@ function langName(code) {
 
 function statusLine(job) {
   if (job.status === "done" && job.result) {
-    const via = job.result.source === "youtube" ? "用的视频自带字幕" : "语音转写";
-    return `${job.result.lines} 行 · ${via}`;
+    const via = job.result.source === "youtube" ? "from the video's own subtitles" : "transcribed";
+    return `${job.result.lines} lines · ${via}`;
   }
-  if (job.status === "failed") return esc(job.error || "失败");
-  return { queued: "等待中", running: "处理中……", cancelled: "已取消" }[job.status] || job.status;
+  if (job.status === "failed") return esc(job.error || "Failed");
+  return { queued: "Waiting", running: "Working...", cancelled: "Cancelled" }[job.status] || job.status;
 }
 
 function actionButtons(job) {
   if (job.status === "queued" || job.status === "running") {
-    return `<button class="ghost small" data-cancel>取消</button>`;
+    return `<button class="ghost small" data-cancel>Cancel</button>`;
   }
-  if (job.status === "done" && job.result) {
+  if (job.status === "done" && job.result && job.language === cfg.language) {
     const name = job.result.path.split(/[\\/]/).pop();
-    // 只有当它所属的语言正是当前选中的语言时，才能就地打开预览。
-    if (job.language && job.language === cfg.language) {
-      return `<button class="ghost small" data-view="${esc(name)}">查看</button>`;
-    }
+    return `<button class="ghost small" data-view="${esc(name)}">View</button>`;
   }
   return "";
 }
@@ -275,44 +432,167 @@ function logLine(line) {
   return `<div class="${cls}">${esc(line)}</div>`;
 }
 
+// 队列里的计时每秒刷新一次，不然停在那儿像是卡住了。
+setInterval(() => {
+  for (const node of document.querySelectorAll(".job")) {
+    const job = jobs.get(node.dataset.id);
+    if (!job || job.status !== "running" || !job.started) continue;
+    const time = node.querySelector(".job-time");
+    if (time) {
+      const secs = Math.round(Date.now() / 1000 - job.started);
+      time.textContent = secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs}s`;
+    }
+  }
+}, 1000);
+
 // ---------------------------------------------------------------- 文件
 
 async function refreshFiles() {
   const data = await (await fetch("/api/files")).json();
-  const list = $("files");
-  $("files-empty").hidden = data.files.length > 0;
-  $("files-empty").textContent = `这里还是空的 —— ${currentLang().name || ""}字幕会存到这个目录。`;
-  list.innerHTML = data.files.map((f) => `
-    <li data-name="${esc(f.name)}">
-      <span class="name">${esc(f.name)}</span>
-      <span class="meta">${new Date(f.modified * 1000).toLocaleString()}</span>
-    </li>`).join("");
-  for (const li of list.children) li.onclick = () => preview(li.dataset.name);
+  allFiles = data.files;
+  bumpStat($("stat-files"), allFiles.length);
+  renderFiles();
 }
+
+function renderFiles() {
+  const term = $("file-search").value.trim().toLowerCase();
+  const shown = term ? allFiles.filter((f) => f.name.toLowerCase().includes(term)) : allFiles;
+
+  $("files-empty").hidden = shown.length > 0;
+  $("files-empty").textContent = term
+    ? "Nothing matches that."
+    : `Nothing here yet — ${currentLang().name || ""} subtitles land in this folder.`;
+
+  $("files").innerHTML = shown.map((f) => `
+    <li data-name="${esc(f.name)}">
+      <span class="name">${highlight(f.name, term)}</span>
+      <span class="meta">${new Date(f.modified * 1000).toLocaleDateString()} · ${kb(f.size)}</span>
+    </li>`).join("");
+  for (const li of $("files").children) li.onclick = () => preview(li.dataset.name);
+}
+
+function kb(bytes) {
+  return bytes > 1024 * 1024
+    ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function highlight(value, term) {
+  if (!term) return esc(value);
+  const index = value.toLowerCase().indexOf(term);
+  if (index < 0) return esc(value);
+  return esc(value.slice(0, index)) + "<mark>" + esc(value.slice(index, index + term.length)) +
+         "</mark>" + esc(value.slice(index + term.length));
+}
+
+// ---------------------------------------------------------------- 预览
 
 async function preview(name) {
   const res = await fetch(`/api/file?name=${encodeURIComponent(name)}`);
-  if (!res.ok) return;
+  if (!res.ok) { toast("Could not open that file.", "bad"); return; }
   const data = await res.json();
+  currentFile = data.name;
+  cues = data.cues;
+  cueIndex = -1;
   $("preview-title").textContent = data.name;
   $("preview-path").textContent = data.path;
-  $("preview-cues").innerHTML = data.cues.map((cue) => {
+  $("cue-search").value = "";
+  renderCues();
+  $("preview-overlay").hidden = false;
+
+  const lines = cues.length;
+  bumpStat($("stat-lines"), lines);
+}
+
+function renderCues() {
+  const term = $("cue-search").value.trim().toLowerCase();
+  const shown = term
+    ? cues.map((c, i) => ({ ...c, i })).filter((c) => c.text.toLowerCase().includes(term))
+    : cues.map((c, i) => ({ ...c, i }));
+
+  $("cue-count").textContent = term
+    ? `${shown.length} of ${cues.length} lines match`
+    : `${cues.length} lines`;
+
+  $("preview-cues").innerHTML = shown.map((cue) => {
     const [head, ...rest] = cue.text.split("\n");
-    return `<div class="cue">
+    // 第二行是注音，第三行才是英文——生成时就是这个顺序。
+    const reading = rest.length > 1 ? rest[0] : (looksLikeReading(rest[0]) ? rest[0] : "");
+    const trans = rest.length > 1 ? rest.slice(1).join(" ") : (reading ? "" : rest[0] || "");
+    return `<div class="cue" data-i="${cue.i}">
       <time>${clock(cue.start)}</time>
       <div>
-        <div class="zh">${esc(head)}</div>
-        ${rest.map((r) => `<div class="sub">${esc(r)}</div>`).join("")}
+        <div class="zh">${highlight(head, term)}</div>
+        ${reading ? `<div class="reading">${highlight(reading, term)}</div>` : ""}
+        ${trans ? `<div class="trans">${highlight(trans, term)}</div>` : ""}
       </div>
     </div>`;
   }).join("");
-  $("preview-overlay").hidden = false;
+
+  for (const node of $("preview-cues").children) {
+    node.onclick = () => {
+      const line = cues[Number(node.dataset.i)].text.split("\n")[0];
+      copy(line);
+      node.classList.remove("copied"); void node.offsetWidth; node.classList.add("copied");
+      toast("Copied that line.");
+    };
+  }
+}
+
+// 注音行没有汉字/假名，只有字母和声调符号——用这个把它跟英文行分开。
+function looksLikeReading(line) {
+  if (!line) return false;
+  return !/[\u4e00-\u9fff\u3040-\u30ff]/.test(line) && /[āáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ]/i.test(line);
+}
+
+function moveCue(step) {
+  const nodes = [...$("preview-cues").children];
+  if (!nodes.length) return;
+  cueIndex = Math.max(0, Math.min(nodes.length - 1, cueIndex + step));
+  for (const n of nodes) n.classList.remove("sel");
+  const node = nodes[cueIndex];
+  node.classList.add("sel");
+  node.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
+function toggleCueClass(buttonId, className) {
+  const on = $(buttonId).classList.toggle("on");
+  $("preview-cues").classList.toggle(className, !on);
+}
+
+function copyAllCues() {
+  copy(cues.map((c) => c.text).join("\n\n"));
+  toast(`Copied ${cues.length} lines.`);
+}
+
+// 直接从预览数据重建 SRT，不用再问服务端要一次。
+function downloadCues() {
+  const body = cues.map((c, i) =>
+    `${i + 1}\n${stamp(c.start)} --> ${stamp(c.end)}\n${c.text}\n`).join("\n");
+  const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = currentFile || "subtitles.srt";
+  link.click();
+  URL.revokeObjectURL(link.href);
+  toast("Downloaded.");
+}
+
+function stamp(seconds) {
+  const ms = Math.max(0, Math.round(seconds * 1000));
+  const pad = (n, w = 2) => String(n).padStart(w, "0");
+  return `${pad(Math.floor(ms / 3600000))}:${pad(Math.floor(ms / 60000) % 60)}:` +
+         `${pad(Math.floor(ms / 1000) % 60)},${pad(ms % 1000, 3)}`;
 }
 
 function clock(seconds) {
   const s = Math.max(0, Math.floor(seconds));
   const pad = (n) => String(n).padStart(2, "0");
   return `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
+}
+
+function copy(value) {
+  navigator.clipboard?.writeText(value).catch(() => {});
 }
 
 // ---------------------------------------------------------------- 设置
@@ -322,8 +602,8 @@ function openSettings() {
 
   $("set-key").value = "";
   $("key-note").textContent = cfg.api_key
-    ? "已经保存了一个密钥，留空即保持不变。"
-    : "还没有密钥 —— 没有密钥就无法进行语音转写。";
+    ? "A key is saved. Leave this blank to keep it."
+    : "No key yet — transcription will not run without one.";
 
   $("set-out-lang").textContent = `· ${lang.name || ""}`;
   $("set-prompt-lang").textContent = `· ${lang.name || ""}`;
@@ -334,7 +614,6 @@ function openSettings() {
   fillSelect($("set-model"), models.whisper.length ? models.whisper : FALLBACK_WHISPER, cfg.model);
   fillSelect($("set-translate-model"), models.chat.length ? models.chat : FALLBACK_CHAT, cfg.translate_model);
 
-  // 简繁只跟中文有关。
   $("row-variant").hidden = !lang.has_script_variant;
   $("set-variant").value = cfg.script_variant ?? "s";
 
@@ -373,7 +652,8 @@ async function saveSettings() {
   await refreshState();
   await refreshFiles();
   if (key) loadModels();
-  $("settings-hint").textContent = "已保存。";
+  $("settings-hint").textContent = "Saved.";
+  toast("Settings saved.");
   setTimeout(() => ($("settings-overlay").hidden = true), 500);
 }
 
@@ -381,6 +661,137 @@ function fillSelect(select, options, selected) {
   const values = [...new Set([...options, selected].filter(Boolean))];
   select.innerHTML = values.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
   if (selected) select.value = selected;
+}
+
+// ---------------------------------------------------------------- 小东西
+
+function toast(message, kind = "") {
+  const node = document.createElement("div");
+  node.className = `toast ${kind}`;
+  node.textContent = message;
+  $("toasts").appendChild(node);
+  setTimeout(() => {
+    node.classList.add("out");
+    setTimeout(() => node.remove(), 260);
+  }, 3200);
+}
+
+function bumpStat(node, value) {
+  if (!node) return;
+  const before = node.textContent;
+  node.textContent = value;
+  if (String(before) === String(value)) return;
+  node.classList.remove("bump"); void node.offsetWidth; node.classList.add("bump");
+}
+
+function startClock() {
+  const tick = () => {
+    const now = new Date();
+    $("rail-clock").textContent =
+      `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const mins = Math.floor((Date.now() - sessionStart) / 60000);
+    $("rail-session").textContent = mins >= 60
+      ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
+  };
+  tick();
+  setInterval(tick, 10000);
+}
+
+// ---------------------------------------------------------------- 熊猫
+
+let pokes = 0;
+let lastActivity = Date.now();
+let pandaState = "";
+
+function startPanda() {
+  const panda = $("panda");
+
+  panda.onclick = (e) => {
+    lastActivity = Date.now();
+    pokes += 1;
+    wake();
+    speak();
+    leaves(e.clientX, e.clientY);
+
+    if (pokes % 10 === 0) {
+      panda.classList.add("spin");
+      setTimeout(() => panda.classList.remove("spin"), 1100);
+      toast(`${pokes} pokes. The panda remembers.`, "gold");
+    } else {
+      panda.classList.add("poke");
+      setTimeout(() => panda.classList.remove("poke"), 500);
+    }
+  };
+
+  // 随机眨眼，间隔不固定，固定了就像机器。
+  const blink = () => {
+    if (pandaState !== "asleep") {
+      panda.classList.add("blink");
+      setTimeout(() => panda.classList.remove("blink"), 200);
+    }
+    setTimeout(blink, 2200 + Math.random() * 5200);
+  };
+  setTimeout(blink, 1800);
+
+  for (const event of ["mousemove", "keydown", "click"]) {
+    document.addEventListener(event, () => { lastActivity = Date.now(); wake(); }, { passive: true });
+  }
+
+  // 闲置两分钟就睡，任务在跑时不睡。
+  setInterval(() => {
+    if (pandaState === "working") return;
+    if (Date.now() - lastActivity > 120000) setPandaState("asleep");
+  }, 5000);
+}
+
+function wake() {
+  if (pandaState === "asleep") setPandaState("");
+}
+
+function setPandaState(state) {
+  if (pandaState === state) return;
+  const panda = $("panda");
+  panda.classList.remove("working", "asleep");
+  pandaState = state;
+  if (state) panda.classList.add(state);
+}
+
+function cheer() {
+  const panda = $("panda");
+  wake();
+  panda.classList.add("cheer");
+  setTimeout(() => panda.classList.remove("cheer"), 720);
+  const box = panda.getBoundingClientRect();
+  leaves(box.left + box.width / 2, box.top + box.height / 2, 7);
+}
+
+function speak() {
+  const lines = SAYINGS[cfg.language] || SAYINGS.zh;
+  const [han, pin, en] = lines[Math.floor(Math.random() * lines.length)];
+  $("bubble-han").textContent = han;
+  $("bubble-pin").textContent = pin;
+  $("bubble-en").textContent = en;
+  const bubble = $("panda-bubble");
+  bubble.hidden = false;
+  clearTimeout(speak.timer);
+  speak.timer = setTimeout(() => (bubble.hidden = true), 2600);
+}
+
+// 点一下飘几片竹叶出来。纯属好玩。
+function leaves(x, y, count = 4) {
+  for (let i = 0; i < count; i++) {
+    const leaf = document.createElement("div");
+    leaf.className = "leaf";
+    leaf.style.left = `${x - 8}px`;
+    leaf.style.top = `${y - 4}px`;
+    leaf.style.setProperty("--dx", `${(Math.random() - 0.4) * 120}px`);
+    leaf.style.setProperty("--dy", `${40 + Math.random() * 90}px`);
+    leaf.style.setProperty("--rot", `${180 + Math.random() * 420}deg`);
+    leaf.style.setProperty("--dur", `${1.6 + Math.random() * 1.2}s`);
+    leaf.style.opacity = String(0.6 + Math.random() * 0.4);
+    document.body.appendChild(leaf);
+    setTimeout(() => leaf.remove(), 3000);
+  }
 }
 
 function esc(value) {
