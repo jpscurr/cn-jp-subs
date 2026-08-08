@@ -1,3 +1,5 @@
+**中文** · [日本語](README.ja.md) · [English](README.en.md)
+
 # 字幕生成器
 
 为句子挖掘准备的中文、日文字幕，生成后可以直接拖进 asbplayer。
