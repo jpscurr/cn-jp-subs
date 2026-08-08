@@ -1,0 +1,7 @@
+yt-dlp>=2024.1.0
+groq>=0.11
+flask>=3.0
+pyperclip>=1.8
+opencc-python-reimplemented>=0.1.7
+pypinyin>=0.51
+jieba>=0.42
