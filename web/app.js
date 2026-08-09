@@ -120,7 +120,10 @@ function wireUp() {
   $("toggle-study").onclick = () => {
     const on = $("toggle-study").classList.toggle("on");
     $("preview-cues").classList.toggle("study", on);
-    if (on) toast("Study mode — hover a line to reveal it.", "gold");
+    // 关掉的时候把揭开过的行清一遍，下次开自测又是全糊的
+    if (!on) for (const n of $("preview-cues").children) n.classList.remove("reveal");
+    // 触屏上没有 hover，说明文字得跟着设备走，否则就是叫人去做做不到的事
+    if (on) toast(`Study mode — ${canHover() ? "hover" : "tap"} a line to reveal it.`, "gold");
   };
   $("cue-copy").onclick = copyAllCues;
   $("cue-download").onclick = downloadCues;
@@ -610,12 +613,24 @@ function renderCues() {
 
   for (const node of $("preview-cues").children) {
     node.onclick = () => {
+      // 自测模式下先当「揭开」用：没有鼠标的机器全靠这一下，
+      // 揭开之后再点才是复制，不然想看一眼答案就得被塞一条 toast。
+      if ($("preview-cues").classList.contains("study") && !node.classList.contains("reveal")) {
+        node.classList.add("reveal");
+        return;
+      }
       const line = cues[Number(node.dataset.i)].text.split("\n")[0];
       copy(line);
       node.classList.remove("copied"); void node.offsetWidth; node.classList.add("copied");
       toast("Copied that line.");
     };
   }
+}
+
+// 触屏／笔没有 hover。matchMedia 比 'ontouchstart' in window 靠谱：
+// 装了触摸屏的笔记本两样都有，这条问的是「当前指针能不能悬停」。
+function canHover() {
+  return matchMedia("(hover: hover)").matches;
 }
 
 // 注音行没有汉字/假名，只有字母和声调符号——用这个把它跟英文行分开。

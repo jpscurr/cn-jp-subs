@@ -53,6 +53,12 @@
   /* 竖栏跟着视口缩，别再写死 244px——中文标题一长就顶出去了 */
   --rail: clamp(224px, 20vw, 272px);
   --grove: 190px;
+
+  /* head 里写了 viewport-fit=cover，页面自己铺到刘海和圆角底下去了，
+     所以边距得自己把安全区加回来。桌面浏览器这几个 env() 全是 0，没有代价。 */
+  --sa-l: env(safe-area-inset-left, 0px);
+  --sa-r: env(safe-area-inset-right, 0px);
+  --sa-b: env(safe-area-inset-bottom, 0px);
 }
 
 /* ------------------------------------------------------------------ 配色
@@ -372,7 +378,8 @@ h2 { font-size: 15px; font-weight: 600; color: var(--ink); }
   position: sticky; top: 0;
   height: 100vh; height: 100dvh;
   display: flex; flex-direction: column; gap: 20px;
-  padding: 20px 18px;
+  padding: 20px 18px calc(20px + var(--sa-b));
+  padding-left: calc(18px + var(--sa-l));
   background: linear-gradient(to bottom, rgba(36,36,41,.88), rgba(29,29,33,.84));
   border-right: 1px solid var(--glass-line);
   box-shadow: var(--glass-hi);
@@ -485,7 +492,10 @@ h2 { font-size: 15px; font-weight: 600; color: var(--ink); }
 
 main {
   width: 100%; max-width: 1180px; margin: 0 auto;
-  padding: clamp(16px, 2.4vw, 28px) clamp(16px, 2.6vw, 32px) 60px;
+  padding: clamp(16px, 2.4vw, 28px)
+           calc(clamp(16px, 2.6vw, 32px) + var(--sa-r))
+           calc(60px + var(--sa-b))
+           calc(clamp(16px, 2.6vw, 32px) + var(--sa-l));
   display: grid; gap: clamp(14px, 1.8vw, 20px);
   min-width: 0;
   container-type: inline-size;
@@ -722,6 +732,9 @@ button:active { transform: translateY(1px); }
   max-height: 88vh; max-height: 88dvh;
   min-height: 0;
   display: flex; flex-direction: column;
+  /* 兜底：里头有自己会滚的块（设置、字幕、词频）时这条永远用不上，
+     但快捷键那张表不会滚——屏幕一矮就被切掉，还够不着。让整张卡能滚。 */
+  overflow-y: auto; overscroll-behavior: contain;
   padding: clamp(15px, 2vw, 20px) clamp(16px, 2.4vw, 24px) clamp(16px, 2.2vw, 22px);
   /* 底下的 overlay 已经把整屏模糊过了，这里再来一次等于白花钱 */
   background: rgba(38,38,43,.93);
@@ -829,9 +842,13 @@ button:active { transform: translateY(1px); }
 .cue .trans { margin-top: 3px; font-size: 13px; line-height: 1.55; color: var(--ink-dim); }
 .cue mark { background: rgba(255,204,77,.25); color: var(--gold); border-radius: 2px; }
 
-/* 自测模式：拼音和译文先藏起来，鼠标放上去才露出来。 */
+/* 自测模式：拼音和译文先藏起来，鼠标放上去才露出来。
+   但「放上去」只有鼠标有——触屏上原来这功能等于废的，j/k 翻行也照样看不见。
+   所以除了 hover，选中那行（j/k）和点开那行（.reveal，触屏点一下加上去）也算露出来。 */
 .cues.study .reading, .cues.study .trans { filter: blur(5px); opacity: .5; transition: filter .18s ease, opacity .18s ease; }
-.cues.study .cue:hover .reading, .cues.study .cue:hover .trans { filter: none; opacity: 1; }
+.cues.study .cue:hover .reading, .cues.study .cue:hover .trans,
+.cues.study .cue.sel .reading, .cues.study .cue.sel .trans,
+.cues.study .cue.reveal .reading, .cues.study .cue.reveal .trans { filter: none; opacity: 1; }
 .cues.no-reading .reading { display: none; }
 .cues.no-trans .trans { display: none; }
 
@@ -907,8 +924,8 @@ button:active { transform: translateY(1px); }
 /* ------------------------------------------------------------------ 快捷键 */
 
 .keys { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.keys li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-dim); }
-.keys li span { margin-left: auto; color: var(--ink-faint); font-size: 12.5px; }
+.keys li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--ink-dim); }
+.keys li span { margin-left: auto; min-width: 0; color: var(--ink-faint); font-size: 12.5px; }
 kbd {
   font-family: var(--mono); font-size: 11px;
   padding: 3px 7px; border-radius: 5px;
@@ -1186,7 +1203,9 @@ kbd {
   .rail {
     height: auto; position: sticky; top: 0;
     flex-direction: row; align-items: center; flex-wrap: wrap;
-    gap: 12px 14px; padding: 11px clamp(14px, 3vw, 18px);
+    gap: 12px 14px;
+    padding: 11px calc(clamp(14px, 3vw, 18px) + var(--sa-r))
+             11px calc(clamp(14px, 3vw, 18px) + var(--sa-l));
     overflow: visible;
     border-right: 0; border-bottom: 1px solid var(--glass-line);
   }
@@ -1206,6 +1225,9 @@ kbd {
 }
 @media (max-width: 620px) {
   .lang-name { display: none; }
+  /* 顶栏折成两行后有 180 多像素高，手机上等于常年少掉四分之一屏。
+     这么窄的时候让它跟着滚走——下面的队列和文件列表才是要一直看的东西。 */
+  .rail { position: static; }
   .rail-foot { width: 100%; margin-left: 0; justify-content: space-between; }
   .rail-buttons { flex: 1; }
   .health { flex: 1; }
@@ -1217,6 +1239,48 @@ kbd {
 /* 手机上背景那几团光和线路板都省掉，纯色底最省电 */
 @media (max-width: 620px) {
   .pipes { display: none; }
+}
+
+/* --------------------------------------------------------------- 矮屏幕
+
+   笔记本掀一半、手机横过来，高度就只剩四五百。宽度没变，所以上面那些
+   max-width 一条都不触发，卡在竖直方向上。这里按高度单独收一轮。 */
+
+@media (max-height: 560px) {
+  /* 浮层留 88% 太客气了，矮屏上那 12% 是实打实的几行字 */
+  .sheet {
+    max-height: 94vh; max-height: 94dvh;
+    padding: 12px clamp(14px, 2.4vw, 20px) 14px;
+  }
+  .sheet-head { margin-bottom: 8px; }
+  .sheet-foot { margin-top: 12px; padding-top: 12px; }
+  /* 词频展开后会把字幕挤到只剩一两行，横屏时它得让一让 */
+  .insights { max-height: 30vh; }
+  .job-log { max-height: 40vh; }
+}
+
+/* ------------------------------------------------------------- 触屏／笔
+
+   hover 是鼠标独有的。触屏上「放上去看看」这件事根本不存在，
+   所以凡是只靠 hover 才能用的功能都得另给一条路（自测模式那条在上面，
+   点一下就是揭开）。剩下的问题是尺寸：手指按不准 28 像素高的按钮。 */
+
+@media (pointer: coarse) {
+  /* 40px 是能稳稳按到的下限。只加高，不动横向内边距，排版不会跟着变。 */
+  button, .chk, .lang, .files li, .chips li {
+    min-height: 40px;
+  }
+  .small { padding: 9px 12px; }
+  .rail-buttons .icon { width: 44px; }
+  /* iOS Safari 会把 16px 以下的输入框在聚焦时自动放大整页，回不去。
+     把表单字号顶到 16px 就不会触发——这是唯一的办法。 */
+  textarea, input[type=text], input[type=password], input[type=number], select,
+  .search, select.mini {
+    font-size: 16px;
+  }
+  /* 手指滚动时字幕行之间要有缝，不然一划就误点 */
+  .cues { gap: 4px; }
+  .cue { padding: 13px 12px; }
 }
 
 /* ------------------------------------------------------------------ 滚动条 */
