@@ -2,12 +2,55 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Subtitle Generator</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>字</text></svg>">
 </head>
 <body>
+
+<!-- 背景层。玻璃总得有东西可透，不然看不出是玻璃。
+     没设图片时就跑这套线路板：细管子 + 一颗带微光的点在里面走。 -->
+<div class="backdrop" id="backdrop" aria-hidden="true">
+  <div class="backdrop-img" id="backdrop-img"></div>
+  <!-- preserveAspectRatio="none"：viewBox 直接线性摊到视口上，
+       1600×900 里的坐标就等于 vw/vh 的百分比，光点才能用 transform 对上。
+       线被拉伸后粗细会不匀，non-scaling-stroke 管住它。 -->
+  <svg class="pipes" viewBox="0 0 1600 900" preserveAspectRatio="none">
+    <g class="pipe-lines" vector-effect="non-scaling-stroke">
+      <path d="M-60 150 H240 L310 220 H620 L690 150 H1060 L1130 220 H1660"/>
+      <path d="M-60 760 H210 L290 680 H550 L620 745 H970 L1050 665 H1660"/>
+      <path d="M130 -60 V230 L205 305 V610 L140 675 V960"/>
+      <path d="M1425 -60 V175 L1345 255 V550 L1425 630 V960"/>
+      <path d="M-60 440 H370 L450 360 H750 L830 440 H1170 L1250 360 H1660"/>
+      <path d="M770 960 V700 L850 620 V450 L780 380 V120"/>
+    </g>
+
+    <!-- 拐弯处点个焊盘，像板子上的过孔 -->
+    <g class="pipe-pads">
+      <circle cx="310" cy="220" r="4"/><circle cx="690" cy="150" r="4"/>
+      <circle cx="1130" cy="220" r="4"/><circle cx="290" cy="680" r="4"/>
+      <circle cx="620" cy="745" r="4"/><circle cx="1050" cy="665" r="4"/>
+      <circle cx="205" cy="305" r="4"/><circle cx="1345" cy="255" r="4"/>
+      <circle cx="450" cy="360" r="4"/><circle cx="830" cy="440" r="4"/>
+      <circle cx="1250" cy="360" r="4"/><circle cx="850" cy="620" r="4"/>
+    </g>
+
+  </svg>
+
+  <!-- 光点故意放在 SVG 外面，用普通 div 走 transform：
+       transform 能交给合成器，动起来一帧都不用重画；
+       原来那套 offset-path 是主线程动画，每帧都要把整张全屏 SVG 重画一遍，
+       这才是真正卡的地方。 -->
+  <div class="sparks">
+    <i class="spark s-sentence"></i>
+    <i class="spark s-translate"></i>
+    <i class="spark s-definition"></i>
+    <i class="spark s-word"></i>
+    <i class="spark s-gold"></i>
+    <i class="spark s-diagram"></i>
+  </div>
+</div>
 
 <aside class="rail">
   <div class="brand">
@@ -38,17 +81,19 @@
     <div class="rail-clock"><span id="rail-clock">--:--</span><span id="rail-session"></span></div>
   </div>
 
-  <!-- 竹林里的熊猫。纯装饰，但可以点。 -->
-  <div class="grove" id="grove">
-    <div class="stalk s1"><i></i><i></i><i></i></div>
-    <div class="stalk s2"><i></i><i></i></div>
-    <div class="stalk s3"><i></i><i></i><i></i></div>
+  <!-- 角落里的小动物。纯装饰，但可以点。中文是竹林熊猫，日文换成池子里的锦鲤。 -->
+  <div class="scene" id="scene" data-mascot="zh">
 
     <div class="bubble" id="panda-bubble" hidden>
       <span class="bubble-han" id="bubble-han"></span>
       <span class="bubble-pin" id="bubble-pin"></span>
       <span class="bubble-en" id="bubble-en"></span>
     </div>
+
+  <div class="grove">
+    <div class="stalk s1"><i></i><i></i><i></i></div>
+    <div class="stalk s2"><i></i><i></i></div>
+    <div class="stalk s3"><i></i><i></i><i></i></div>
 
     <button class="panda" id="panda" aria-label="Panda">
       <svg viewBox="0 0 120 116" xmlns="http://www.w3.org/2000/svg">
@@ -79,6 +124,58 @@
         </g>
       </svg>
     </button>
+  </div>
+
+  <!-- 锦鲤：两条，绕着池子转，大的在外圈。 -->
+  <div class="pond">
+    <button class="pond-hit" id="koi-btn" aria-label="Koi pond">
+      <svg viewBox="0 0 200 150" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="water" cx="50%" cy="42%" r="62%">
+            <stop offset="0%"  stop-color="#2b6f7a" stop-opacity=".55"/>
+            <stop offset="70%" stop-color="#1b4650" stop-opacity=".42"/>
+            <stop offset="100%" stop-color="#12333b" stop-opacity=".3"/>
+          </radialGradient>
+          <clipPath id="water-clip">
+            <ellipse cx="100" cy="86" rx="86" ry="52"/>
+          </clipPath>
+          <!-- 一条鲤鱼一个模板，两条只是大小和颜色不同 -->
+          <g id="koi-shape">
+            <ellipse class="k-tail" cx="-13" cy="0" rx="9" ry="7"/>
+            <ellipse class="k-fin"  cx="0" cy="-6" rx="5" ry="3"/>
+            <ellipse class="k-fin"  cx="0" cy="6"  rx="5" ry="3"/>
+            <ellipse class="k-body" cx="0" cy="0" rx="15" ry="7"/>
+            <ellipse class="k-spot" cx="4"  cy="-1" rx="5" ry="4"/>
+            <ellipse class="k-spot" cx="-6" cy="1"  rx="3.5" ry="2.5"/>
+            <circle  class="k-eye"  cx="12" cy="-2.4" r="1.3"/>
+            <circle  class="k-eye"  cx="12" cy="2.4"  r="1.3"/>
+          </g>
+        </defs>
+
+        <ellipse class="pond-water" cx="100" cy="86" rx="86" ry="52"/>
+        <ellipse class="pond-rim"   cx="100" cy="86" rx="86" ry="52"/>
+
+        <g clip-path="url(#water-clip)">
+          <!-- 水面上的圈，慢慢扩散 -->
+          <ellipse class="ripple r1" cx="100" cy="86" rx="24" ry="14"/>
+          <ellipse class="ripple r2" cx="100" cy="86" rx="24" ry="14"/>
+          <ellipse class="ripple r3" cx="100" cy="86" rx="24" ry="14"/>
+
+          <!-- 绕圈用旋转，不用 offset-path：整组绕池心转，鱼摆在圆的正上方，
+               它自己的 +x 方向刚好就是切线，不用再额外拧角度。 -->
+          <g class="orbit orbit-a"><g class="koi koi-a" transform="translate(100 42)"><use href="#koi-shape"/></g></g>
+          <g class="orbit orbit-b"><g class="koi koi-b" transform="translate(100 60) scale(.72)"><use href="#koi-shape"/></g></g>
+        </g>
+
+        <!-- 睡着时冒的泡 -->
+        <g class="k-zzz">
+          <circle class="kz1" cx="150" cy="60" r="3"/>
+          <circle class="kz2" cx="158" cy="52" r="2"/>
+        </g>
+      </svg>
+    </button>
+  </div>
+
   </div>
 </aside>
 
@@ -201,6 +298,36 @@
       <label class="wide">Whisper prompt <em id="set-prompt-lang"></em>
         <textarea id="set-prompt" rows="2"></textarea>
         <small>Steers the transcription toward the right language and normal punctuation.</small>
+      </label>
+
+      <label>Background
+        <select id="set-bg-mode">
+          <option value="circuit">Circuit — animated</option>
+          <option value="image">Your own image</option>
+          <option value="plain">Plain</option>
+        </select>
+        <small>The glass needs something behind it. Circuit draws pipes with a glowing dot running through them.</small>
+      </label>
+      <label>Animation
+        <select id="set-motion">
+          <option value="auto">Auto — off on slower machines</option>
+          <option value="full">Full</option>
+          <option value="off">Off</option>
+        </select>
+        <small id="motion-note"></small>
+      </label>
+      <label id="row-bg-dim">Background dim
+        <input type="range" id="set-bg-dim" min="0" max="85" step="5">
+        <small>Darkens the backdrop so the panels stay readable.</small>
+      </label>
+      <label class="wide" id="row-bg-image">Image
+        <div class="bg-pick">
+          <input type="text" id="set-bg-url" placeholder="Paste an image URL, or pick a file →" spellcheck="false">
+          <button type="button" class="ghost small" id="bg-file-btn">Choose file</button>
+          <button type="button" class="ghost small" id="bg-clear">Clear</button>
+        </div>
+        <input type="file" id="bg-file" accept="image/*" hidden>
+        <small id="bg-note">Stored in this browser only — it never goes near config.json.</small>
       </label>
     </div>
 

@@ -14,6 +14,12 @@ let currentFile = "";
 let sessionCount = 0;
 let sessionStart = Date.now();
 
+// 背景纯粹是本机的口味问题，不进 config.json，省得两台机器互相覆盖。
+// 注意：init() 在文件顶上就跑了，这几个 const 必须待在它前面，否则 TDZ 报错。
+const BG_KEY = "subs.background";
+const BG_DEFAULT = { mode: "circuit", dim: 45, url: "", motion: "auto" };
+let bg = { ...BG_DEFAULT };
+
 const FALLBACK_WHISPER = ["whisper-large-v3", "whisper-large-v3-turbo"];
 const FALLBACK_CHAT = ["llama-3.3-70b-versatile", "qwen/qwen3-32b", "moonshotai/kimi-k2-instruct"];
 
@@ -57,6 +63,7 @@ const SAYINGS = {
 init();
 
 async function init() {
+  loadBackground();          // 先铺背景，免得先闪一下灰底
   await refreshState();
   await refreshFiles();
   loadModels();
@@ -87,6 +94,8 @@ function wireUp() {
   $("preview-close").onclick = () => ($("preview-overlay").hidden = true);
   $("help-open").onclick = () => ($("help-overlay").hidden = false);
   $("help-close").onclick = () => ($("help-overlay").hidden = true);
+
+  wireBackground();
 
   $("cue-search").addEventListener("input", renderCues);
   $("toggle-reading").onclick = () => toggleCueClass("toggle-reading", "no-reading");
@@ -193,6 +202,8 @@ function renderLanguages() {
     glyph.classList.remove("flip"); void glyph.offsetWidth; glyph.classList.add("flip");
   }
   glyph.textContent = next;
+  // 中文看竹林里的熊猫，日文看池子里的锦鲤
+  $("scene").dataset.mascot = lang.code === "ja" ? "ja" : "zh";
   $("brand-sub").textContent = `${lang.name || ""} subtitles for asbplayer`;
   $("opt-reading-label").textContent = `${lang.reading_label || "Reading"} line`;
   $("toggle-reading").textContent = lang.reading_label || "Reading";
@@ -625,6 +636,7 @@ function openSettings() {
 
   $("set-chunk").value = cfg.chunk_seconds;
   $("set-parallel").value = cfg.parallel_chunks;
+  syncBackgroundControls();   // 背景是即时生效的，不等 Save
   $("settings-hint").textContent = "";
   $("settings-overlay").hidden = false;
 }
@@ -697,33 +709,169 @@ function startClock() {
   setInterval(tick, 10000);
 }
 
+// ---------------------------------------------------------------- 背景
+
+function loadBackground() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(BG_KEY) || "{}");
+    bg = { ...BG_DEFAULT, ...saved };
+  } catch { bg = { ...BG_DEFAULT }; }
+  applyBackground();
+}
+
+// 只放行 http(s) 和 data:image。别的（javascript:、本地磁盘路径之类）一律当没设：
+// 前者不能往 url() 里塞，后者浏览器根本不给读。
+function bgImageValue(url) {
+  if (!/^(https?:\/\/|data:image\/)/i.test(url || "")) return "";
+  return `url("${url.replace(/["\\]/g, "\\$&")}")`;
+}
+
+// 现在动的东西只剩 transform 和 opacity，全在合成器上跑，几乎不占主线程，
+// 所以 auto 只拦真正的老机器（双核／2G）。系统开了「减少动态效果」一律照办。
+function motionOff() {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return true;
+  if (bg.motion === "off") return true;
+  if (bg.motion === "full") return false;
+  const cores = navigator.hardwareConcurrency || 8;
+  const mem = navigator.deviceMemory || 8;
+  return cores <= 2 || mem <= 2;
+}
+
+function applyBackground() {
+  const image = bgImageValue(bg.url);
+  // 选了图片却没有能用的图片，就退回线路板，别留一块黑的
+  const mode = bg.mode === "image" && !image ? "circuit" : bg.mode;
+  $("backdrop").dataset.mode = mode;
+  document.documentElement.dataset.motion = motionOff() ? "off" : "on";
+  document.documentElement.style.setProperty("--bg-dim", String(bg.dim / 100));
+  $("backdrop-img").style.setProperty("--bg-img", image || "none");
+}
+
+function saveBackground() {
+  try {
+    localStorage.setItem(BG_KEY, JSON.stringify(bg));
+  } catch {
+    toast("Couldn't save the background — browser storage is full.", "bad");
+  }
+}
+
+function syncBackgroundControls() {
+  $("set-bg-mode").value = bg.mode;
+  $("set-bg-dim").value = bg.dim;
+  $("set-motion").value = bg.motion;
+  $("motion-note").textContent = motionOff()
+    ? "Animation is off — nothing on the page moves, so the browser can idle."
+    : "Everything moves. Turn this off if the machine feels slow.";
+  $("set-bg-url").value = bg.url.startsWith("data:") ? "" : bg.url;
+  $("bg-note").textContent = bg.url.startsWith("data:")
+    ? "A picked image is loaded. Stored in this browser only."
+    : "Stored in this browser only — it never goes near config.json.";
+  $("row-bg-image").hidden = bg.mode !== "image";
+  $("row-bg-dim").hidden = bg.mode === "plain";
+}
+
+function wireBackground() {
+  $("set-bg-mode").onchange = () => {
+    bg.mode = $("set-bg-mode").value;
+    applyBackground(); saveBackground(); syncBackgroundControls();
+  };
+  $("set-bg-dim").oninput = () => {
+    bg.dim = Number($("set-bg-dim").value);
+    applyBackground();
+  };
+  $("set-bg-dim").onchange = saveBackground;
+
+  $("set-bg-url").onchange = () => {
+    const value = $("set-bg-url").value.trim();
+    if (value && !bgImageValue(value)) {
+      toast("That needs to be an http(s) image URL — for a file on disk, use Choose file.", "bad");
+      return;
+    }
+    bg.url = value;
+    if (value) bg.mode = "image";
+    applyBackground(); saveBackground(); syncBackgroundControls();
+  };
+
+  $("set-motion").onchange = () => {
+    bg.motion = $("set-motion").value;
+    applyBackground(); saveBackground(); syncBackgroundControls();
+  };
+
+  // 页面看不见时把动画停掉，别在后台白烧 CPU。
+  // 初始值也得设——页面可能就是在后台加载的，光等 change 事件等不到。
+  const idle = () => (document.documentElement.dataset.idle = document.hidden ? "1" : "0");
+  document.addEventListener("visibilitychange", idle);
+  idle();
+
+  $("bg-file-btn").onclick = () => $("bg-file").click();
+  $("bg-file").onchange = () => {
+    const file = $("bg-file").files[0];
+    if (!file) return;
+    // localStorage 大概只有 5MB，大图直接塞会炸，先拦一道
+    if (file.size > 3_000_000) {
+      toast("That image is over 3 MB — use a URL instead.", "bad");
+      $("bg-file").value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      bg.url = String(reader.result);
+      bg.mode = "image";
+      applyBackground(); saveBackground(); syncBackgroundControls();
+      toast("Background set.");
+    };
+    reader.readAsDataURL(file);
+    $("bg-file").value = "";
+  };
+
+  $("bg-clear").onclick = () => {
+    bg.url = "";
+    bg.mode = "circuit";
+    applyBackground(); saveBackground(); syncBackgroundControls();
+    toast("Back to the circuit.");
+  };
+}
+
 // ---------------------------------------------------------------- 熊猫
 
 let pokes = 0;
 let lastActivity = Date.now();
 let pandaState = "";
 
+// 两只都在 DOM 里，只是按语言显示其中一只。状态类干脆两只都加，
+// 免得切语言时还要把状态搬过去。
+function mascots() {
+  return [$("panda"), $("koi-btn")];
+}
+function mascotEl() {
+  return cfg.language === "ja" ? $("koi-btn") : $("panda");
+}
+function mascotName() {
+  return cfg.language === "ja" ? "koi" : "panda";
+}
+
 function startPanda() {
+  for (const node of mascots()) {
+    node.onclick = (e) => {
+      lastActivity = Date.now();
+      pokes += 1;
+      wake();
+      speak();
+      burst(e.clientX, e.clientY);
+
+      if (pokes % 10 === 0) {
+        node.classList.add("spin");
+        setTimeout(() => node.classList.remove("spin"), 1100);
+        toast(`${pokes} pokes. The ${mascotName()} remembers.`, "gold");
+      } else {
+        node.classList.add("poke");
+        setTimeout(() => node.classList.remove("poke"), 500);
+      }
+    };
+  }
+
+  // 随机眨眼，间隔不固定，固定了就像机器。鲤鱼没眼皮，不参与。
   const panda = $("panda");
-
-  panda.onclick = (e) => {
-    lastActivity = Date.now();
-    pokes += 1;
-    wake();
-    speak();
-    leaves(e.clientX, e.clientY);
-
-    if (pokes % 10 === 0) {
-      panda.classList.add("spin");
-      setTimeout(() => panda.classList.remove("spin"), 1100);
-      toast(`${pokes} pokes. The panda remembers.`, "gold");
-    } else {
-      panda.classList.add("poke");
-      setTimeout(() => panda.classList.remove("poke"), 500);
-    }
-  };
-
-  // 随机眨眼，间隔不固定，固定了就像机器。
   const blink = () => {
     if (pandaState !== "asleep") {
       panda.classList.add("blink");
@@ -750,19 +898,20 @@ function wake() {
 
 function setPandaState(state) {
   if (pandaState === state) return;
-  const panda = $("panda");
-  panda.classList.remove("working", "asleep");
   pandaState = state;
-  if (state) panda.classList.add(state);
+  for (const node of mascots()) {
+    node.classList.remove("working", "asleep");
+    if (state) node.classList.add(state);
+  }
 }
 
 function cheer() {
-  const panda = $("panda");
   wake();
-  panda.classList.add("cheer");
-  setTimeout(() => panda.classList.remove("cheer"), 720);
-  const box = panda.getBoundingClientRect();
-  leaves(box.left + box.width / 2, box.top + box.height / 2, 7);
+  const node = mascotEl();
+  node.classList.add("cheer");
+  setTimeout(() => node.classList.remove("cheer"), 720);
+  const box = node.getBoundingClientRect();
+  burst(box.left + box.width / 2, box.top + box.height / 2, 7);
 }
 
 function speak() {
@@ -777,11 +926,12 @@ function speak() {
   speak.timer = setTimeout(() => (bubble.hidden = true), 2600);
 }
 
-// 点一下飘几片竹叶出来。纯属好玩。
-function leaves(x, y, count = 4) {
+// 点一下飘几片竹叶／溅几滴水出来。纯属好玩。
+function burst(x, y, count = 4) {
+  const kind = cfg.language === "ja" ? "drop" : "leaf";
   for (let i = 0; i < count; i++) {
     const leaf = document.createElement("div");
-    leaf.className = "leaf";
+    leaf.className = kind;
     leaf.style.left = `${x - 8}px`;
     leaf.style.top = `${y - 4}px`;
     leaf.style.setProperty("--dx", `${(Math.random() - 0.4) * 120}px`);
