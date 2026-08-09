@@ -26,10 +26,14 @@
   --r:    10px;
   --r-lg: 14px;
 
-  --sans: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* 同理，界面上大部分是英文，拉丁字体排前面，汉字再落到中文字体 */
+  --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
   --han:  "Kaiti SC", "STKaiti", "Noto Serif SC", "SimSun", serif;
   --serif:"Noto Serif SC", "Source Han Serif SC", Georgia, serif;
-  --read: Georgia, "Gentium Plus", serif;
+  /* 注音行专用。Georgia 没有 ǎ ǒ ǔ 这些带 caron 的预组合字符，
+     浏览器只好拿基字母加一个组合符号硬拼，「hǎo」会显示成「ha ˇ o」。
+     Cambria / Constantia 是有的，Charis SIL 和 Gentium 更专业，装了就优先用。 */
+  --read: "Charis SIL", "Gentium Plus", Cambria, Constantia, "Times New Roman", serif;
   --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
 
   --shadow: 0 4px 25px rgba(0,0,0,.25);
@@ -51,6 +55,104 @@
   --grove: 190px;
 }
 
+/* ------------------------------------------------------------------ 配色
+
+   主题只改上面那些变量，别的什么都不动——没有额外的层，没有重排，
+   切换就是重新解析一遍变量，代价约等于零。
+   六个强调色的语义在每套主题里保持一致：
+   word=最亮的那个、sentence=「行」、definition=「选中」、translate=「次要」。 */
+
+/* 水墨：近黑的纸、朱砂的印 */
+[data-theme="ink"] {
+  --bg: #17171a; --panel-3: #202024; --dict: #101013; --line: #35353c;
+  --ink: #e8e4dc; --ink-dim: #c3bdb2; --ink-faint: #837d73;
+  --word: #e2645e; --image: #d18e45; --sentence: #7f9f6e; --definition: #9a7fa8;
+  --translate: #6f97a8; --diagram: #4f9a94; --gold: #d8b45a; --bad: #d9534f;
+  --glass: rgba(28,28,32,.84); --glass-3: rgba(14,14,17,.86);
+  --glass-line: rgba(232,228,220,.09);
+}
+
+/* 抹茶：偏绿的灰，米色的字 */
+[data-theme="matcha"] {
+  --bg: #1c211c; --panel-3: #232a23; --dict: #141814; --line: #3a463a;
+  --ink: #e6ebe0; --ink-dim: #c3ccbb; --ink-faint: #8b9585;
+  --word: #e0846b; --image: #d69a4c; --sentence: #8cc06a; --definition: #a58bc4;
+  --translate: #6fa8b8; --diagram: #58b09a; --gold: #ddc46a; --bad: #e0736b;
+  --glass: rgba(30,36,30,.84); --glass-3: rgba(17,21,17,.86);
+  --glass-line: rgba(230,235,224,.09);
+}
+
+/* 樱：暗紫的底，粉与奶油 */
+[data-theme="sakura"] {
+  --bg: #211a20; --panel-3: #2a212a; --dict: #171218; --line: #453745;
+  --ink: #f2e7ee; --ink-dim: #d5c2ce; --ink-faint: #9c8794;
+  --word: #f091b5; --image: #e2a06a; --sentence: #8fc79e; --definition: #b795e0;
+  --translate: #7fb0dd; --diagram: #63bfc0; --gold: #f0c674; --bad: #f0797f;
+  --glass: rgba(38,29,37,.84); --glass-3: rgba(21,16,22,.86);
+  --glass-line: rgba(242,231,238,.1);
+}
+
+/* Nord：冷灰蓝，眼睛最省力的一套 */
+[data-theme="nord"] {
+  --bg: #2e3440; --panel-3: #3b4252; --dict: #272c36; --line: #4c566a;
+  --ink: #eceff4; --ink-dim: #d8dee9; --ink-faint: #8f9bb0;
+  --word: #c49cbd; --image: #d08770; --sentence: #a3be8c; --definition: #c49cbd;
+  --translate: #8fb2d4; --diagram: #88c0d0; --gold: #ebcb8b; --bad: #cf6f78;
+  --glass: rgba(59,66,82,.82); --glass-3: rgba(39,44,54,.86);
+  --glass-line: rgba(236,239,244,.1);
+}
+
+/* 终端：黑底磷绿，给喜欢这一口的人 */
+[data-theme="terminal"] {
+  --bg: #0c0f0c; --panel-3: #141a14; --dict: #080b08; --line: #24402a;
+  --ink: #cdf5d3; --ink-dim: #9ed2a8; --ink-faint: #5f8a68;
+  --word: #6ee7a0; --image: #b6e36b; --sentence: #4ade80; --definition: #7dd3fc;
+  --translate: #67e8f9; --diagram: #34d399; --gold: #d9f99d; --bad: #fb7185;
+  --glass: rgba(14,20,15,.86); --glass-3: rgba(6,10,7,.9);
+  --glass-line: rgba(110,231,160,.14);
+  --sans: var(--mono);
+}
+
+/* 「跟着语言走」：中文一套朱红，日文一套藏青 */
+[data-theme="lang-zh"] {
+  --bg: #1e1917; --panel-3: #282020; --dict: #140f0e; --line: #3f322f;
+  --ink: #f0e6e0; --ink-dim: #d3c2b9; --ink-faint: #9a867c;
+  --word: #e8615c; --image: #e09454; --sentence: #a8c076; --definition: #c08ad0;
+  --translate: #6fa8c8; --diagram: #55b3a8; --gold: #f0c04d; --bad: #e8615c;
+  --glass: rgba(35,28,26,.84); --glass-3: rgba(19,14,13,.86);
+  --glass-line: rgba(240,230,224,.09);
+}
+[data-theme="lang-ja"] {
+  --bg: #161a24; --panel-3: #1e2430; --dict: #0e1119; --line: #303a4c;
+  --ink: #e6ecf5; --ink-dim: #c2cbdb; --ink-faint: #808da3;
+  --word: #f2919f; --image: #e0a165; --sentence: #86c79b; --definition: #9d92e0;
+  --translate: #79aeea; --diagram: #5fc0cf; --gold: #ecc776; --bad: #f2818f;
+  --glass: rgba(26,32,44,.84); --glass-3: rgba(13,16,24,.86);
+  --glass-line: rgba(230,236,245,.1);
+}
+
+/* ------------------------------------------------------------------ 字体
+
+   同一个码位，中日字形是不一样的：直、骨、今、写、steps 这些字，
+   用中文字体渲染日文会显出「中国味」，反过来也一样。默认那套是中文优先，
+   所以切到日文时把汉字字体整组换掉，让假名和汉字出自同一套设计。 */
+html[data-lang="ja"] {
+  --han:   "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", "MS Mincho", serif;
+  --serif: "Noto Serif JP", "Yu Mincho", "Hiragino Mincho ProN", "Source Han Serif JP", serif;
+  /* 拉丁字体必须排在日文字体前面。字体回退是逐字符的，所以拉丁字母走 Segoe UI，
+     假名汉字自然落到 Yu Gothic。反过来排的话，日文字体会把反斜杠画成 ¥，
+     Windows 路径就成了「C:¥Users¥…」。 */
+  --sans:  system-ui, -apple-system, "Segoe UI",
+           "Yu Gothic UI", "Yu Gothic", "Hiragino Sans", "Noto Sans JP", Meiryo, sans-serif;
+}
+/* 终端主题整体走等宽，别被上面这条覆盖回去 */
+html[data-theme="terminal"] { --sans: var(--mono); }
+
+/* 主题切换时颜色淡入，别硬切 */
+body, .card, .rail, .sheet, .tag, .glyph {
+  transition: background-color .35s ease, color .35s ease, border-color .35s ease;
+}
+
 * { box-sizing: border-box; }
 html { color-scheme: dark; }
 
@@ -68,15 +170,16 @@ body {
   overflow-x: clip;
 }
 
-/* 玻璃得有东西可透，所以底下铺几团颜色——比原来重一点，但仍旧很淡。 */
+/* 底下铺几团很淡的光，玻璃才有东西可透。
+   颜色取自当前主题的强调色，所以换主题时这层氛围光也跟着换。 */
 body::before {
   content: "";
   position: fixed; inset: 0; z-index: 0; pointer-events: none;
   background:
-    radial-gradient(52% 40% at 4% 92%, rgba(72,187,120,.13) 0%, transparent 72%),
-    radial-gradient(48% 36% at 96% 6%, rgba(99,179,237,.12) 0%, transparent 70%),
-    radial-gradient(44% 38% at 72% 88%, rgba(246,135,179,.07) 0%, transparent 72%),
-    radial-gradient(56% 44% at 44% 34%, rgba(159,122,234,.08) 0%, transparent 76%);
+    radial-gradient(52% 40% at 4% 92%,  color-mix(in srgb, var(--sentence) 14%, transparent) 0%, transparent 72%),
+    radial-gradient(48% 36% at 96% 6%,  color-mix(in srgb, var(--translate) 13%, transparent) 0%, transparent 70%),
+    radial-gradient(44% 38% at 72% 88%, color-mix(in srgb, var(--word) 8%, transparent) 0%, transparent 72%),
+    radial-gradient(56% 44% at 44% 34%, color-mix(in srgb, var(--definition) 9%, transparent) 0%, transparent 76%);
 }
 body > * { position: relative; z-index: 1; }
 
@@ -104,14 +207,14 @@ body > * { position: relative; z-index: 1; }
 }
 .pipes { position: absolute; inset: 0; width: 100%; height: 100%; }
 
-/* 管子本身：极细，几乎只是暗示 */
+/* 管子本身：极细，几乎只是暗示。颜色也跟着主题走。 */
 .pipe-lines path {
   fill: none;
-  stroke: rgba(148,163,184,.16);
+  stroke: color-mix(in srgb, var(--ink-faint) 42%, transparent);
   stroke-width: 1.4;
   stroke-linecap: round; stroke-linejoin: round;
 }
-.pipe-pads circle { fill: rgba(148,163,184,.2); }
+.pipe-pads circle { fill: color-mix(in srgb, var(--ink-faint) 52%, transparent); }
 
 /* 光点。每个都是一颗 12px 的小圆，微光靠 radial-gradient 画死在背景里——
    静态渐变只画一次，之后每帧只是搬动一个已经画好的层。 */
@@ -542,7 +645,8 @@ button:active { transform: translateY(1px); }
 .job:has(.dot.failed)  { border-left-color: var(--bad); }
 
 .job-head { display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; }
-.job-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.job-title { flex: 1; min-width: 0; font-size: 14px; }
+.job-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .job-sub { margin-top: 2px; font-size: 12px; color: var(--ink-faint); font-style: italic; }
 .job-time { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); white-space: nowrap; }
 
@@ -730,6 +834,75 @@ button:active { transform: translateY(1px); }
 .cues.study .cue:hover .reading, .cues.study .cue:hover .trans { filter: none; opacity: 1; }
 .cues.no-reading .reading { display: none; }
 .cues.no-trans .trans { display: none; }
+
+/* ------------------------------------------------------------------ 词频 */
+
+.insights {
+  flex: none;
+  margin: 10px 0 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--glass-line);
+  border-left: 3px solid var(--diagram);
+  border-radius: var(--r-sm);
+  background: var(--glass-3);
+  max-height: 42vh; overflow-y: auto; overscroll-behavior: contain;
+}
+.insights[hidden] { display: none; }
+
+/* 顶上那排数字 */
+.insight-stats {
+  display: grid; gap: 10px 18px;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  margin-bottom: 14px;
+}
+.insight-stats div { min-width: 0; }
+.insight-stats dt {
+  font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-faint); white-space: nowrap;
+}
+.insight-stats dd {
+  margin: 2px 0 0; font-family: var(--read); font-size: 19px; color: var(--gold);
+  font-variant-numeric: tabular-nums; line-height: 1.2;
+}
+.insight-stats .level dd { color: var(--sentence); font-size: 16px; }
+.insight-note {
+  grid-column: 1 / -1; margin: 0;
+  font-size: 12px; font-style: italic; color: var(--ink-faint);
+}
+
+.insight-cols { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.insight-cols > div { min-width: 0; }
+.insight-cols .tag { margin-bottom: 8px; }
+
+/* 词条做成小药丸，右上角挂出现次数 */
+.chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.chips li {
+  display: flex; align-items: baseline; gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--glass-line); border-radius: 6px;
+  background: rgba(255,255,255,.04);
+  cursor: pointer;
+  transition: border-color .14s ease, background .14s ease;
+}
+.chips li:hover { border-color: var(--sentence); background: rgba(255,255,255,.08); }
+.chips .w { font-family: var(--han); font-size: 15px; color: var(--ink); }
+.chips .r { font-family: var(--read); font-size: 11px; color: var(--gold); opacity: .85; }
+.chips .n {
+  font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ 查词 */
+
+.head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.hit { cursor: pointer; }
+.hit .hit-file {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: 11px; color: var(--ink-faint); font-family: var(--mono);
+  margin-bottom: 2px;
+}
+.hit .hit-file b { font-weight: 400; color: var(--translate); overflow-wrap: anywhere; }
 
 /* ------------------------------------------------------------------ 快捷键 */
 

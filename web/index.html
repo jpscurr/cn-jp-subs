@@ -217,7 +217,10 @@
     <section class="card files-card">
       <div class="card-head">
         <div class="tag tag-translation" data-tag="output">【输出】</div>
-        <button class="ghost small" id="open-folder">Open folder</button>
+        <div class="head-actions">
+          <button class="ghost small" id="lookup-open" title="Search every subtitle you've made (l)">Look up</button>
+          <button class="ghost small" id="open-folder">Open folder</button>
+        </div>
       </div>
       <input type="text" id="file-search" class="search" placeholder="Filter files..." spellcheck="false">
       <ul id="files" class="files"></ul>
@@ -241,12 +244,46 @@
         <button class="ghost small toggle on" id="toggle-reading" title="Show the reading line">拼音</button>
         <button class="ghost small toggle on" id="toggle-trans" title="Show the translation line">EN</button>
         <button class="ghost small toggle" id="toggle-study" title="Hide everything but the original — test yourself">Study</button>
+        <button class="ghost small toggle" id="toggle-insights" title="Word frequency and difficulty (i)">Insights</button>
         <button class="ghost small" id="cue-copy">Copy all</button>
-        <button class="ghost small" id="cue-download">Download</button>
+        <button class="ghost small" id="cue-download" title="Save the .srt">SRT</button>
+        <button class="ghost small" id="cue-anki" title="Tab-separated file for Anki import">Anki</button>
       </div>
     </div>
+
+    <!-- 词频／难度。默认收着，按 Insights 才展开。 -->
+    <section class="insights" id="insights" hidden>
+      <div class="insight-stats" id="insight-stats"></div>
+      <div class="insight-cols">
+        <div>
+          <div class="tag tag-word" data-tag="words">【词】</div>
+          <ul class="chips" id="insight-words"></ul>
+        </div>
+        <div id="insight-chars-col">
+          <div class="tag tag-diagram" data-tag="chars">【字】</div>
+          <ul class="chips" id="insight-chars"></ul>
+        </div>
+      </div>
+    </section>
+
     <p class="cue-count" id="cue-count"></p>
     <div class="cues" id="preview-cues"></div>
+  </div>
+</div>
+
+<!-- 全库查词：一个词在你做过的所有字幕里出现在哪 -->
+<div class="overlay" id="lookup-overlay" hidden>
+  <div class="sheet wide-sheet">
+    <div class="sheet-head">
+      <div class="tag tag-sentence" data-tag="lookup">【查词】</div>
+      <h2>Look up a word</h2>
+      <button class="ghost small" id="lookup-close">Close</button>
+    </div>
+    <input type="text" id="lookup-input" class="search"
+           placeholder="A word or phrase — searched across every subtitle file" spellcheck="false">
+    <p class="cue-count" id="lookup-count"></p>
+    <div class="cues" id="lookup-hits"></div>
+    <p class="empty" id="lookup-empty">Type something to search your whole library.</p>
   </div>
 </div>
 
@@ -308,6 +345,18 @@
         </select>
         <small>The glass needs something behind it. Circuit draws pipes with a glowing dot running through them.</small>
       </label>
+      <label>Theme
+        <select id="set-theme">
+          <option value="anki">Anki — the original grey</option>
+          <option value="auto">Follow the language</option>
+          <option value="ink">Ink — sumi black &amp; vermilion</option>
+          <option value="matcha">Matcha</option>
+          <option value="sakura">Sakura</option>
+          <option value="nord">Nord</option>
+          <option value="terminal">Terminal</option>
+        </select>
+        <small>“Follow the language” goes warm red for Chinese, indigo for Japanese.</small>
+      </label>
       <label>Animation
         <select id="set-motion">
           <option value="auto">Auto — off on slower machines</option>
@@ -349,8 +398,11 @@
       <li><kbd>Ctrl</kbd><kbd>Enter</kbd><span>Generate from the links box</span></li>
       <li><kbd>/</kbd><span>Jump to the links box</span></li>
       <li><kbd>f</kbd><span>Filter the output files</span></li>
+      <li><kbd>l</kbd><span>Look a word up across every file</span></li>
       <li><kbd>g</kbd><span>Open the output folder</span></li>
       <li><kbd>s</kbd><span>Settings</span></li>
+      <li><kbd>t</kbd><span>Next theme</span></li>
+      <li><kbd>i</kbd><span>Insights, while previewing</span></li>
       <li><kbd>j</kbd> <kbd>k</kbd><span>Move through subtitles in the preview</span></li>
       <li><kbd>Esc</kbd><span>Close whatever is open</span></li>
       <li><kbd>?</kbd><span>This list</span></li>

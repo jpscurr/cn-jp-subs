@@ -205,6 +205,52 @@ check("返回数组", _parse('{"lines": ["a", "b"]}') == {"1": "a", "2": "b"})
 check("完全不是 JSON", _parse("not json at all") == {})
 check("序号提取", _index("3.") == 3 and _index("line 7") == 7)
 
+print("\n-- 统计与检索 --")
+from cnsubs import analyze, library
+
+# 三行结构：原文 / 注音 / 英文。统计只应该看第一行。
+sample = [
+    {"start": 0.0, "end": 2.0, "text": "我买了一个椰子\nwǒ mǎi le yīgè yēzi\nI bought a coconut"},
+    {"start": 2.0, "end": 4.0, "text": "椰子很好吃\nyēzi hěn hǎochī\nCoconuts are tasty"},
+    {"start": 4.0, "end": 6.0, "text": "这是我的椰子"},
+]
+check("只统计原文行", analyze.source_lines(sample) == ["我买了一个椰子", "椰子很好吃", "这是我的椰子"],
+      analyze.source_lines(sample))
+
+vocab = analyze.vocabulary(sample, "zh")
+words = {v["word"]: v["count"] for v in vocab}
+check("词频统计", words.get("椰子") == 3, words)
+check("虚词已剔除", "的" not in words and "了" not in words, list(words))
+check("词条带注音", any(v["reading"] for v in vocab), vocab[:2])
+check("注音不进词表", "yēzi" not in words and "coconut" not in words, list(words))
+
+chars = {c["char"]: c["count"] for c in analyze.characters(sample)}
+check("单字统计", chars.get("椰") == 3, chars)
+check("常见字不上榜", "的" not in chars and "我" not in chars, list(chars))
+
+st = analyze.stats(sample, "zh")
+check("时长取首尾", st["seconds"] == 6.0, st["seconds"])
+check("行数", st["lines"] == 3, st["lines"])
+check("难度有档位", st["difficulty"]["level"] in ("Gentle", "Steady", "Brisk", "Dense"),
+      st["difficulty"])
+
+check("空字幕不报错", analyze.report([], "zh")["stats"]["lines"] == 0)
+check("日文也能分词", isinstance(analyze.vocabulary(
+    [{"start": 0, "end": 1, "text": "今日は公園に行きました"}], "ja"), list))
+
+import tempfile
+with tempfile.TemporaryDirectory() as tmp:
+    folder = pathlib.Path(tmp)
+    (folder / "a.srt").write_text(srt.serialize(sample), encoding="utf-8")
+    found = library.search(folder, "椰子")
+    check("全库检索命中", len(found["hits"]) == 3, found)
+    check("检索只看原文行", not library.search(folder, "coconut")["hits"],
+          library.search(folder, "coconut")["hits"])
+    check("空词返回空", library.search(folder, "  ")["hits"] == [])
+    check("检索结果带时间", found["hits"][0]["start"] == 0.0, found["hits"][0])
+    pool = library.phrase_pool(folder, "zh")
+    check("句子池可用", all(4 <= len(p["text"]) <= 18 for p in pool), pool)
+
 print("\n-- 网页服务 --")
 import app as webapp
 client = webapp.app.test_client()
@@ -223,6 +269,11 @@ bad = client.post("/api/jobs", json={"urls": "这里没有链接"})
 check("拒绝无链接的文本", bad.status_code == 400, bad.status_code)
 check("不存在的文件 404", client.get("/api/file?name=nope.srt").status_code == 404)
 check("阻止路径穿越", client.get("/api/file?name=../../config.json").status_code == 404)
+check("统计接口挡住路径穿越", client.get("/api/analyze?name=../../config.json").status_code == 404)
+check("统计接口 404", client.get("/api/analyze?name=nope.srt").status_code == 404)
+check("检索接口 200", client.get("/api/search?q=测试").status_code == 200)
+check("检索空词不报错", client.get("/api/search?q=").get_json()["hits"] == [])
+check("句子接口 200", "phrases" in client.get("/api/phrases").get_json())
 
 print("\n" + ("全部通过" if not fails else f"{len(fails)} 项失败：{fails}"))
 sys.exit(1 if fails else 0)

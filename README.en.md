@@ -62,6 +62,27 @@ Other flags: `--reading` / `--no-reading`, `--translate` / `--no-translate`,
 | English line | Runs a second translation pass over the cleaned subtitles, batched and with context. |
 | Accept auto-generated subtitles | Whether to use YouTube's machine captions when no human ones exist. Usually worse than transcribing yourself, so off by default. |
 
+## What the interface can do
+
+Generating the file is only the first half. Once a subtitle exists:
+
+- **Insights** (in the preview, or `i`) — the words this episode repeats, each with
+  its reading and a count, plus a character list for Chinese. The row of numbers is
+  lines, length, characters per minute, how many distinct characters, and a rough
+  pace rating. Faster than watching ten minutes to find out if something suits you.
+  Click any word to filter the file down to the lines containing it.
+- **Look up** (`l`) — find a word across every subtitle you have ever generated,
+  with the file and timestamp. Click a result to jump straight to that line.
+- **Anki export** (the `Anki` button) — a tab-separated file with the sentence,
+  reading, translation, and source. Anki's "Import File" reads it as-is.
+- **Themes** (in settings, or `t` to cycle) — seven palettes. "Follow the language"
+  goes warm red for Chinese and indigo for Japanese.
+- **Background** (in settings) — a circuit board with a glowing dot tracing the
+  pipes, your own image, or nothing. Set Animation to off and the page stops moving
+  entirely, which is the cheapest it can be on an older machine.
+
+Press `?` for the full list of shortcuts.
+
 ## Layout
 
 ```
@@ -75,6 +96,8 @@ cnsubs/
   srt.py            SRT / VTT parsing and generation
   text.py           cleanup, Simplified/Traditional conversion, line breaking, readings
   translate.py      the optional English line
+  analyze.py        word and character frequency, pace, difficulty
+  library.py        cached search across the whole output folder
 test_offline.py     runs with no network and no key
 ```
 

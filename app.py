@@ -16,7 +16,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory, Response
 
-from cnsubs import config, languages, pipeline, srt, text
+from cnsubs import analyze, config, languages, library, pipeline, srt, text
 from cnsubs.text import HAS_KANA, HAS_OPENCC, HAS_PINYIN, HAS_SEGMENTER
 
 HOST = "127.0.0.1"
@@ -94,6 +94,21 @@ def worker_loop() -> None:
 
 
 threading.Thread(target=worker_loop, daemon=True).start()
+
+
+def _warm_segmenter() -> None:
+    """jieba 第一次分词要先建前缀词典，得好几秒。
+
+    那几秒如果落在用户第一次点「Insights」上，界面就干等着。
+    开机时在后台先切一个字把它捂热，等真要用的时候已经就绪了。
+    """
+    try:
+        text.reading_line("热身", "zh")
+    except Exception:
+        pass
+
+
+threading.Thread(target=_warm_segmenter, daemon=True).start()
 
 
 # ---------------------------------------------------------------------------
@@ -304,6 +319,33 @@ def file_preview():
         return jsonify({"error": "File not found"}), 404
     cues = srt.parse(path.read_text(encoding="utf-8", errors="ignore"))
     return jsonify({"name": name, "path": str(path), "cues": cues[:2000]})
+
+
+@app.get("/api/analyze")
+def analyze_file():
+    """一个文件的词频、用字和难度。"""
+    name = Path(request.args.get("name", "")).name
+    path = active_output_dir() / name
+    if not path.exists() or path.suffix.lower() != ".srt":
+        return jsonify({"error": "File not found"}), 404
+    cues = srt.parse(path.read_text(encoding="utf-8", errors="ignore"))
+    language = config.active(config.load())["language"]
+    return jsonify({"name": name, **analyze.report(cues, language)})
+
+
+@app.get("/api/search")
+def search_library():
+    """在当前语言的整个输出目录里找一个词。"""
+    term = request.args.get("q", "")
+    return jsonify(library.search(active_output_dir(), term))
+
+
+@app.get("/api/phrases")
+def phrases():
+    """给小动物的气泡用：从你自己的字幕里挑出来的句子。"""
+    flat = config.active(config.load())
+    pool = library.phrase_pool(Path(flat["output_dir"]).expanduser(), flat["language"])
+    return jsonify({"phrases": pool})
 
 
 @app.post("/api/reveal")
