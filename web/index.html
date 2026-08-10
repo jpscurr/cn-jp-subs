@@ -50,6 +50,20 @@
     <i class="spark s-gold"></i>
     <i class="spark s-diagram"></i>
   </div>
+
+  <!-- 另外两套背景。三套的 DOM 一直都在，由 data-mode 决定显示哪一套：
+       这样换背景只是切一个属性，不用重建节点。两套都跟光点一个路子，
+       只动 transform 和 opacity，全在合成器上跑。 -->
+
+  <!-- 星野：三层平铺的星点，各自以不同速度往下淌，就有了纵深。
+       每层平移的距离正好等于一块的高度，接缝看不出来。 -->
+  <div class="stars"><i></i><i></i><i></i></div>
+
+  <!-- 落花：中文飘竹叶，日文飘樱瓣，跟角落里的小动物是一套。 -->
+  <div class="motes">
+    <i></i><i></i><i></i><i></i><i></i><i></i>
+    <i></i><i></i><i></i><i></i><i></i><i></i>
+  </div>
 </div>
 
 <aside class="rail">
@@ -195,6 +209,8 @@
         <label class="chk"><input type="checkbox" id="opt-auto"> <span>Accept auto-generated subtitles</span></label>
         <label class="chk"><input type="checkbox" id="opt-reading"> <span id="opt-reading-label">Pinyin line</span></label>
         <label class="chk"><input type="checkbox" id="opt-translate"> <span>English line</span></label>
+        <label class="chk" id="row-music" title="Split the vocals off the backing track before transcribing">
+          <input type="checkbox" id="opt-music"> <span>Music mode</span></label>
       </div>
       <div class="compose-actions">
         <select id="opt-model" class="mini" title="Whisper model"></select>
@@ -210,6 +226,7 @@
         <div class="tag tag-definition" data-tag="queue">【队列】</div>
         <button class="ghost small" id="clear-done">Clear finished</button>
       </div>
+      <p class="list-hint" id="queue-hint" hidden>Click a job to watch its log.</p>
       <div id="queue" class="queue"></div>
       <p class="empty" id="queue-empty">Nothing in the queue yet.</p>
     </section>
@@ -223,6 +240,8 @@
         </div>
       </div>
       <input type="text" id="file-search" class="search" placeholder="Filter files..." spellcheck="false">
+      <!-- 点文件就能读，可原来看不出来它能点，白白藏着一半功能 -->
+      <p class="list-hint" id="files-hint">Click a file to read it — search inside it, star lines, see word frequency, export to Anki.</p>
       <ul id="files" class="files"></ul>
       <p class="empty" id="files-empty">No subtitle files yet.</p>
     </section>
@@ -245,9 +264,10 @@
         <button class="ghost small toggle on" id="toggle-trans" title="Show the translation line">EN</button>
         <button class="ghost small toggle" id="toggle-study" title="Hide everything but the original — test yourself">Study</button>
         <button class="ghost small toggle" id="toggle-insights" title="Word frequency and difficulty (i)">Insights</button>
+        <button class="ghost small toggle" id="toggle-starred" title="Show only the lines you starred">★ <span id="star-count">0</span></button>
         <button class="ghost small" id="cue-copy">Copy all</button>
         <button class="ghost small" id="cue-download" title="Save the .srt">SRT</button>
-        <button class="ghost small" id="cue-anki" title="Tab-separated file for Anki import">Anki</button>
+        <button class="ghost small" id="cue-anki" title="Tab-separated file for Anki import — starred lines only, if you starred any">Anki</button>
       </div>
     </div>
 
@@ -258,6 +278,7 @@
         <div>
           <div class="tag tag-word" data-tag="words">【词】</div>
           <ul class="chips" id="insight-words"></ul>
+          <button class="ghost small" id="words-anki" title="Every word above, as Anki cards with its reading and an example line">Word list → Anki</button>
         </div>
         <div id="insight-chars-col">
           <div class="tag tag-diagram" data-tag="chars">【字】</div>
@@ -339,11 +360,13 @@
 
       <label>Background
         <select id="set-bg-mode">
-          <option value="circuit">Circuit — animated</option>
+          <option value="circuit">Circuit — pipes and travelling dots</option>
+          <option value="stars">Star field — three drifting layers</option>
+          <option value="petals">Falling leaves — bamboo, or sakura in Japanese</option>
           <option value="image">Your own image</option>
           <option value="plain">Plain</option>
         </select>
-        <small>The glass needs something behind it. Circuit draws pipes with a glowing dot running through them.</small>
+        <small>The glass needs something behind it. All three animated ones only move on the compositor, so they cost close to nothing.</small>
       </label>
       <label>Theme
         <select id="set-theme">
@@ -354,8 +377,11 @@
           <option value="sakura">Sakura</option>
           <option value="nord">Nord</option>
           <option value="terminal">Terminal</option>
+          <option value="washi">Washi — light, warm paper</option>
+          <option value="daylight">Daylight — light, cool</option>
+          <option value="contrast">High contrast</option>
         </select>
-        <small>“Follow the language” goes warm red for Chinese, indigo for Japanese.</small>
+        <small>“Follow the language” goes warm red for Chinese, indigo for Japanese. Press <kbd>t</kbd> to cycle.</small>
       </label>
       <label>Animation
         <select id="set-motion">
@@ -404,6 +430,9 @@
       <li><kbd>t</kbd><span>Next theme</span></li>
       <li><kbd>i</kbd><span>Insights, while previewing</span></li>
       <li><kbd>j</kbd> <kbd>k</kbd><span>Move through subtitles in the preview</span></li>
+      <li><kbd>m</kbd><span>Star the selected line for mining</span></li>
+      <li><kbd>a</kbd><span>Export to Anki — starred lines, or all of them</span></li>
+      <li><kbd>b</kbd><span>Next background</span></li>
       <li><kbd>Esc</kbd><span>Close whatever is open</span></li>
       <li><kbd>?</kbd><span>This list</span></li>
     </ul>

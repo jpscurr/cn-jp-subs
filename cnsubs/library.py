@@ -11,7 +11,7 @@ import re
 import threading
 from pathlib import Path
 
-from . import srt
+from . import meta, srt
 
 # {路径: (修改时间, 字幕列表)}
 _CACHE: dict[str, tuple[float, list[dict]]] = {}
@@ -90,15 +90,18 @@ def phrase_pool(folder: Path, language: str, want: int = 60) -> list[dict]:
         return []
 
     paths = sorted(folder.glob("*.srt"), key=lambda p: p.stat().st_mtime, reverse=True)[:8]
+    table = meta.read(folder)
     pool: list[dict] = []
     seen: set[str] = set()
 
     for path in paths:
+        info = table.get(path.name) or {}
         for cue in cues_for(path):
-            parts = [p.strip() for p in (cue.get("text") or "").split("\n") if p.strip()]
-            if not parts:
+            # 拆行交给 meta：只有两行时，那一行是注音还是英文得看文件的记录，
+            # 直接按下标取会把假名注音塞进气泡的英文位。
+            head, reading, translation = meta.split_lines(cue.get("text") or "", info)
+            if not head:
                 continue
-            head = parts[0]
             # 太短没意思，太长气泡塞不下。
             if not (4 <= len(head) <= 18) or head in seen:
                 continue
@@ -108,8 +111,8 @@ def phrase_pool(folder: Path, language: str, want: int = 60) -> list[dict]:
             seen.add(head)
             pool.append({
                 "text": head,
-                "reading": parts[1] if len(parts) > 1 else "",
-                "translation": parts[2] if len(parts) > 2 else "",
+                "reading": reading,
+                "translation": translation,
                 "file": path.name,
                 "start": cue.get("start", 0),
             })

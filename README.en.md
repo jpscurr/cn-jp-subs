@@ -46,6 +46,7 @@ python cn.py --lang ja <link>       treat this run as Japanese
 ```
 
 Other flags: `--reading` / `--no-reading`, `--translate` / `--no-translate`,
+`--music` / `--no-music`,
 `--model <name>`, `--turbo`, `--force` (ignore the "already processed" record).
 
 ## Settings
@@ -61,6 +62,7 @@ Other flags: `--reading` / `--no-reading`, `--translate` / `--no-translate`,
 | Concurrent uploads | How many chunks transcribe at once. Raise for speed, lower if you hit rate limits. |
 | English line | Runs a second translation pass over the cleaned subtitles, batched and with context. |
 | Accept auto-generated subtitles | Whether to use YouTube's machine captions when no human ones exist. Usually worse than transcribing yourself, so off by default. |
+| Music mode | Splits the vocals off the backing track with Demucs first, then transcribes with shorter chunks and a lyrics prompt. Singing already flattens the tones; a backing track on top leaves Whisper guessing. Needs `pip install demucs` — the switch still works without it, you just don't get the separation. |
 
 ## What the interface can do
 
@@ -73,13 +75,22 @@ Generating the file is only the first half. Once a subtitle exists:
   Click any word to filter the file down to the lines containing it.
 - **Look up** (`l`) — find a word across every subtitle you have ever generated,
   with the file and timestamp. Click a result to jump straight to that line.
-- **Anki export** (the `Anki` button) — a tab-separated file with the sentence,
-  reading, translation, and source. Anki's "Import File" reads it as-is.
-- **Themes** (in settings, or `t` to cycle) — seven palettes. "Follow the language"
-  goes warm red for Chinese and indigo for Japanese.
-- **Background** (in settings) — a circuit board with a glowing dot tracing the
-  pipes, your own image, or nothing. Set Animation to off and the page stops moving
-  entirely, which is the cheapest it can be on an older machine.
+- **Picking sentences** (the ★ on each line, or `j`/`k` then `m`) — what you pick is
+  kept in the browser and is still there when you come back. `★ n` in the toolbar
+  narrows the list to just those.
+- **Anki export** (the `Anki` button, or `a`) — a tab-separated file with the sentence,
+  reading, translation, and source. Anki's "Import File" reads it as-is. If you starred
+  anything, only those go out; star nothing and you get the whole episode. Under the
+  word list there is also **Word list → Anki**, which turns this episode's repeated
+  words into cards with their reading and an example line.
+- **Themes** (in settings, or `t` to cycle) — ten palettes, including two light ones
+  (Washi, Daylight) and a high-contrast one. "Follow the language" goes warm red for
+  Chinese and indigo for Japanese.
+- **Background** (in settings, or `b` to cycle) — a circuit board with a glowing dot
+  tracing the pipes, a drifting star field, falling leaves, your own image, or nothing.
+  All three animated ones only move transform and opacity, so they run on the
+  compositor. Set Animation to off and the page stops moving entirely, which is the
+  cheapest it can be on an older machine.
 
 Press `?` for the full list of shortcuts.
 
@@ -98,6 +109,8 @@ cnsubs/
   translate.py      the optional English line
   analyze.py        word and character frequency, pace, difficulty
   library.py        cached search across the whole output folder
+  meta.py           how each subtitle was made (does it carry a reading line, an English line)
+  separate.py       music mode: vocal separation with Demucs (optional dependency)
 test_offline.py     runs with no network and no key
 ```
 

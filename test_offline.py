@@ -251,6 +251,105 @@ with tempfile.TemporaryDirectory() as tmp:
     pool = library.phrase_pool(folder, "zh")
     check("句子池可用", all(4 <= len(p["text"]) <= 18 for p in pool), pool)
 
+print("\n-- 拆行：注音还是英文 --")
+from cnsubs import meta
+
+# 有记录的时候不许再猜。日文那条是当初出问题的原型：只有两行，
+# 第二行是假名，靠猜会被当成英文，导出 Anki 时就填错字段。
+zh_two = "我买了椰子\nwǒ mǎi le yēzi"
+ja_two = "今日は学校に行きました\nきょう は がっこう に いき ました"
+en_two = "我买了椰子\nI bought a coconut"
+
+check("按记录拆：注音", meta.split_lines(ja_two, {"reading": True, "translation": False})
+      == ("今日は学校に行きました", "きょう は がっこう に いき ました", ""),
+      meta.split_lines(ja_two, {"reading": True, "translation": False}))
+check("按记录拆：翻译", meta.split_lines(en_two, {"reading": False, "translation": True})
+      == ("我买了椰子", "", "I bought a coconut"),
+      meta.split_lines(en_two, {"reading": False, "translation": True}))
+check("三行顺序固定", meta.split_lines("我买了椰子\nwǒ mǎi le yēzi\nI bought a coconut", {})
+      == ("我买了椰子", "wǒ mǎi le yēzi", "I bought a coconut"))
+check("只有原文", meta.split_lines("我买了椰子", {}) == ("我买了椰子", "", ""))
+check("空的不炸", meta.split_lines("", {}) == ("", "", ""))
+check("空行被忽略", meta.split_lines("我买了椰子\n\nI bought a coconut", {})
+      == ("我买了椰子", "", "I bought a coconut"), meta.split_lines("我买了椰子\n\nI bought a coconut", {}))
+
+# 没有记录（以前生成的文件）就只能猜，但四种注音都得猜对。
+check("猜：假名是注音", meta.looks_like_reading("きょう は がっこう に いき ました"))
+check("猜：片假名也是注音", meta.looks_like_reading("エピソード"))
+check("猜：拼音是注音", meta.looks_like_reading("wǒ mǎi le yēzi"))
+check("猜：罗马字是注音", meta.looks_like_reading("toukyou wa ookii machi desu"))
+check("猜：带 to 的罗马字仍是注音", meta.looks_like_reading("watashi to anata"),
+      meta.looks_like_reading("watashi to anata"))
+check("猜：英文不是注音", not meta.looks_like_reading("I bought a coconut"))
+check("猜：小写英文也不是", not meta.looks_like_reading("that is what you said"),
+      meta.looks_like_reading("that is what you said"))
+check("猜：带汉字的不是注音", not meta.looks_like_reading("我买了椰子"))
+check("猜：空行不是注音", not meta.looks_like_reading(""))
+check("两行没记录时靠猜", meta.split_lines(ja_two, {})[1] == "きょう は がっこう に いき ました",
+      meta.split_lines(ja_two, {}))
+check("两项全开时也靠猜", meta.split_lines(zh_two, {"reading": True, "translation": True})[1]
+      == "wǒ mǎi le yēzi", meta.split_lines(zh_two, {"reading": True, "translation": True}))
+
+with tempfile.TemporaryDirectory() as tmp:
+    folder = pathlib.Path(tmp)
+    (folder / "a.srt").write_text("x", encoding="utf-8")
+    meta.record(folder, "a.srt", reading=True, translation=False, music=True)
+    check("记录能读回来", meta.get(folder, "a.srt")["reading"] is True, meta.get(folder, "a.srt"))
+    check("记录写在隐藏文件里", (folder / meta.INDEX_NAME).exists())
+    check("没写临时文件", not list(folder.glob("*.tmp")))
+    meta.record(folder, "b.srt", reading=False, translation=True)
+    check("两条记录并存", len(meta.read(folder)) == 2, meta.read(folder))
+    check("没记录的文件返回空", meta.get(folder, "nope.srt") == {})
+    check("记录挡住路径穿越", meta.get(folder, "../../config.json") == {})
+    (folder / meta.INDEX_NAME).write_text("{ 坏掉的 json", encoding="utf-8")
+    check("表坏了当没有", meta.read(folder) == {})
+
+print("\n-- 音乐模式 --")
+music_cfg = config.active({**config.DEFAULTS, "language": "zh", "music_mode": True})
+check("中文有专门的歌词提示词", "歌" in music_cfg["music_prompt"], music_cfg["music_prompt"])
+check("日文有专门的歌词提示词",
+      "歌" in config.active({**config.DEFAULTS, "language": "ja"})["music_prompt"])
+
+applied = pipeline.apply_music_mode(music_cfg, lambda *a: None)
+check("分段被压短", applied["chunk_seconds"] == pipeline.MUSIC_CHUNK_SECONDS,
+      applied["chunk_seconds"])
+check("提示词换成歌词那条", applied["prompt"] == music_cfg["music_prompt"], applied["prompt"])
+check("自动字幕被关掉", applied["allow_auto_subs"] is False)
+check("原设置没被就地改掉", music_cfg["chunk_seconds"] == 600, music_cfg["chunk_seconds"])
+short = pipeline.apply_music_mode({**music_cfg, "chunk_seconds": 120}, lambda *a: None)
+check("本来就短就不动它", short["chunk_seconds"] == 120, short["chunk_seconds"])
+
+from cnsubs import separate
+check("能查 Demucs 装没装", isinstance(separate.available(), bool))
+check("查的时候不把 torch 拉进来", "torch" not in sys.modules or separate.available())
+check("music_mode 是通用设置", "music_mode" in config.SHARED_DEFAULTS)
+check("music_prompt 不写进 config.json",
+      "music_prompt" not in config.SHARED_DEFAULTS and "music_prompt" not in config.PER_LANGUAGE_KEYS)
+
+with tempfile.TemporaryDirectory() as tmp:
+    out = pathlib.Path(tmp)
+    work = out / ".work"
+    (work / "fresh").mkdir(parents=True)
+    (work / "stale").mkdir()
+    import os as _os
+    _os.utime(work / "stale", (0, 0))          # 假装是很久以前留下的
+    gone = pipeline.sweep_work_dirs(out)
+    check("清掉过期的临时目录", gone == 1 and not (work / "stale").exists(), gone)
+    check("正在用的不动它", (work / "fresh").exists())
+    check("目录不在也不报错", pipeline.sweep_work_dirs(out / "nope") == 0)
+
+print("\n-- 气泡取句子 --")
+with tempfile.TemporaryDirectory() as tmp:
+    folder = pathlib.Path(tmp)
+    (folder / "ja.srt").write_text(srt.serialize([
+        {"start": 0.0, "end": 2.0, "text": ja_two},
+    ]), encoding="utf-8")
+    meta.record(folder, "ja.srt", reading=True, translation=False)
+    library._CACHE.clear()
+    pool = library.phrase_pool(folder, "ja")
+    check("假名进的是注音位", pool and pool[0]["reading"].startswith("きょう"), pool)
+    check("翻译位是空的", pool and pool[0]["translation"] == "", pool)
+
 print("\n-- 网页服务 --")
 import app as webapp
 client = webapp.app.test_client()
@@ -274,6 +373,45 @@ check("统计接口 404", client.get("/api/analyze?name=nope.srt").status_code =
 check("检索接口 200", client.get("/api/search?q=测试").status_code == 200)
 check("检索空词不报错", client.get("/api/search?q=").get_json()["hits"] == [])
 check("句子接口 200", "phrases" in client.get("/api/phrases").get_json())
+check("环境里报了 demucs", "demucs" in body["env"], list(body["env"]))
+check("重试不存在的任务 404", client.post("/api/jobs/nope/retry").status_code == 404)
+
+# 文件列表和预览都要带上「这份字幕里有什么」，浏览器靠它拆行。
+_real_out = webapp.active_output_dir
+with tempfile.TemporaryDirectory() as tmp:
+    folder = pathlib.Path(tmp)
+    (folder / "demo.srt").write_text(srt.serialize([
+        {"start": 0.0, "end": 2.0, "text": ja_two}]), encoding="utf-8")
+    meta.record(folder, "demo.srt", reading=True, translation=False, music=True)
+    webapp.active_output_dir = lambda: folder
+
+    listed = client.get("/api/files").get_json()["files"]
+    check("文件列表带标记", listed and listed[0]["marks"] == ["reading", "music"], listed)
+
+    one = client.get("/api/file?name=demo.srt").get_json()
+    check("预览带 layout", one["layout"]["reading"] is True, one.get("layout"))
+    check("预览仍然给字幕", len(one["cues"]) == 1, one["cues"])
+
+    # 索引文件本身不是字幕，别混进列表里
+    check("索引不出现在文件列表", all(f["name"] != meta.INDEX_NAME for f in listed), listed)
+    check("索引读不出来", client.get(f"/api/file?name={meta.INDEX_NAME}").status_code == 404)
+webapp.active_output_dir = _real_out
+
+# 重试要挑状态：还在跑的不许重排，不然同一个任务会有两份在跑。
+_job = {"id": "t1", "url": "u", "title": "t", "language": "zh", "status": "running",
+        "log": [], "result": None, "error": None, "cfg": {},
+        "cancel": webapp.threading.Event()}
+webapp.JOBS["t1"] = _job
+check("跑着的任务不给重试", client.post("/api/jobs/t1/retry").status_code == 400)
+_job["status"] = "failed"
+check("失败的任务可以重试", client.post("/api/jobs/t1/retry").status_code == 200)
+check("重试后回到排队", _job["status"] == "queued", _job["status"])
+check("重试清掉了上次的报错", _job["error"] is None)
+check("重试换了新的取消开关", not _job["cancel"].is_set())
+# 重试真的把它排进队列了，后台线程会来捡。先掐掉再拿走，免得它拿着一份空设置
+# 真去跑一趟——这是离线自检，不该有任何联网动作。
+_job["cancel"].set()
+webapp.JOBS.pop("t1", None)
 
 print("\n" + ("全部通过" if not fails else f"{len(fails)} 项失败：{fails}"))
 sys.exit(1 if fails else 0)

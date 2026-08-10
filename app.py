@@ -16,7 +16,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory, Response
 
-from cnsubs import analyze, config, languages, library, pipeline, srt, text
+from cnsubs import analyze, config, languages, library, meta, pipeline, separate, srt, text
 from cnsubs.text import HAS_KANA, HAS_OPENCC, HAS_PINYIN, HAS_SEGMENTER
 
 HOST = "127.0.0.1"
@@ -149,6 +149,7 @@ def state():
             "pinyin": HAS_PINYIN,
             "segmenter": HAS_SEGMENTER,
             "kana": HAS_KANA,
+            "demucs": separate.available(),
             "reading_ok": text.has_reading_support(flat["language"]),
             "key_from_env": bool(os.environ.get("GROQ_API_KEY", "").strip()),
             "output_dir": flat["output_dir"],
@@ -235,6 +236,26 @@ def cancel(job_id):
     return jsonify({"ok": True})
 
 
+@app.post("/api/jobs/<job_id>/retry")
+def retry(job_id):
+    """把失败或取消的任务原样再排一次。
+
+    用的是任务当初那份设置快照，不是现在的设置——失败多半是网络抖了一下，
+    重来一次就好，不该因为期间换了语言就把它扔进另一个目录。
+    """
+    job = JOBS.get(job_id)
+    if not job:
+        return jsonify({"error": "No such job"}), 404
+    if job["status"] not in ("failed", "cancelled"):
+        return jsonify({"error": "That job has not finished failing yet."}), 400
+
+    job["cancel"] = threading.Event()
+    update(job, status="queued", error=None, result=None, started=None, finished=None)
+    add_log(job, "[=] Retrying.")
+    WORK_QUEUE.put(job_id)
+    return jsonify({"ok": True})
+
+
 @app.post("/api/jobs/clear")
 def clear_finished():
     with LOCK:
@@ -303,10 +324,15 @@ def files():
     out = active_output_dir()
     if not out.exists():
         return jsonify({"files": []})
+    table = meta.read(out)
     rows = []
     for path in sorted(out.glob("*.srt"), key=lambda p: p.stat().st_mtime, reverse=True)[:60]:
+        info = table.get(path.name) or {}
         rows.append({"name": path.name, "size": path.stat().st_size,
-                     "modified": path.stat().st_mtime})
+                     "modified": path.stat().st_mtime,
+                     # 列表上那几个小标记：有注音行、有英文行、走的音乐模式
+                     "marks": [k for k in ("reading", "translation", "music") if info.get(k)],
+                     "source": info.get("source", "")})
     return jsonify({"files": rows})
 
 
@@ -318,7 +344,10 @@ def file_preview():
     if not path.exists() or path.suffix.lower() != ".srt":
         return jsonify({"error": "File not found"}), 404
     cues = srt.parse(path.read_text(encoding="utf-8", errors="ignore"))
-    return jsonify({"name": name, "path": str(path), "cues": cues[:2000]})
+    # layout 告诉浏览器第二行是注音还是英文。生成时记下来的，没有记录
+    # （以前做的文件）就发空的，那边自己去猜。
+    return jsonify({"name": name, "path": str(path), "cues": cues[:2000],
+                    "layout": meta.get(out, name)})
 
 
 @app.get("/api/analyze")
@@ -373,7 +402,21 @@ def reveal():
     return jsonify({"ok": True, "path": str(out)})
 
 
+def sweep_leftovers() -> None:
+    """上一次跑到一半被强杀时，留在输出目录里的临时文件。"""
+    cfg = config.load()
+    for code in languages.codes():
+        try:
+            out = Path(config.active({**cfg, "language": code})["output_dir"]).expanduser()
+            gone = pipeline.sweep_work_dirs(out)
+            if gone:
+                print(f"[=] Cleaned up {gone} leftover work folder(s) in {out}")
+        except OSError:
+            pass
+
+
 def main():
+    sweep_leftovers()
     missing = pipeline.missing_dependencies()
     if missing:
         print(f"[!] Not on PATH: {', '.join(missing)} - transcription will fail.")

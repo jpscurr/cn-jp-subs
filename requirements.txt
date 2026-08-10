@@ -2,6 +2,15 @@ yt-dlp>=2024.1.0
 groq>=0.11
 flask>=3.0
 pyperclip>=1.8
+
+# 中文：简繁转换、拼音、分词
 opencc-python-reimplemented>=0.1.7
 pypinyin>=0.51
 jieba>=0.42
+
+# 日文：假名读音
+pykakasi>=2.2
+
+# 音乐模式（可选，装了才在界面上点亮）。Demucs 会把 torch 一起拉进来，
+# 好几百 MB，不唱歌的话完全不需要装：
+#   pip install demucs

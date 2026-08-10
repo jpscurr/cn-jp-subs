@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yt_dlp
 
-from . import config, languages, srt
+from . import config, languages, meta, separate, srt
 from .translate import translate_cues
 
 URL_RE = re.compile(
@@ -20,6 +20,10 @@ URL_RE = re.compile(
 )
 
 NO_WINDOW = {"creationflags": 0x08000000} if hasattr(subprocess, "CREATE_NO_WINDOW") else {}
+
+# 音乐模式下的分段上限。整首歌通常也就三五分钟，比这个还长的多半是合集，
+# 切短一点让时间轴不至于一路偏下去。
+MUSIC_CHUNK_SECONDS = 300
 
 
 class Cancelled(Exception):
@@ -144,7 +148,13 @@ def fetch_existing_subs(url: str, info: dict, work: Path, cfg: dict, log) -> lis
 # 路线二：下载音频，交给 Whisper
 # ---------------------------------------------------------------------------
 
-def download_audio(url: str, work: Path, log) -> Path:
+def download_audio(url: str, work: Path, log, keep_quality: bool = False) -> Path:
+    """下载音频。
+
+    平时直接压成 Whisper 要的 16 kHz 单声道，省流量也省上传时间。但这一步
+    是有损的，压完再去做人声分离就晚了——Demucs 要的高频细节已经没了。
+    所以 keep_quality=True 时原样留着，等分离完再压。
+    """
     state = {"pct": -10}
 
     def hook(status):
@@ -161,16 +171,18 @@ def download_audio(url: str, work: Path, log) -> Path:
     opts = {
         "format": "ba/ba*/b",
         "outtmpl": str(work / "audio.%(ext)s"),
-        "postprocessors": [{
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": "48",
-        }],
-        "postprocessor_args": ["-ac", "1", "-ar", "16000"],
         "quiet": True, "no_warnings": True, "noprogress": True, "noplaylist": True,
         "progress_hooks": [hook],
         "retries": 5, "fragment_retries": 5,
     }
+    if not keep_quality:
+        opts["postprocessors"] = [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "mp3",
+            "preferredquality": "48",
+        }]
+        opts["postprocessor_args"] = ["-ac", "1", "-ar", "16000"]
+
     with yt_dlp.YoutubeDL(opts) as ydl:
         ydl.download([url])
 
@@ -181,6 +193,40 @@ def download_audio(url: str, work: Path, log) -> Path:
             raise RuntimeError("The audio download produced no file")
         audio = found
     return audio
+
+
+def encode_for_whisper(audio: Path, work: Path, log) -> Path:
+    """压成 Whisper 要的 16 kHz 单声道 MP3。
+
+    只有音乐模式会走到这里：那条路上下载的是原始音质，分离出来的人声还是
+    WAV，直接上传又大又慢。分离已经把伴奏去掉了，这时候再压掉高频不影响
+    识别。压不出来就把手里这个原样送走——大不了慢一点，别把任务弄挂。
+    """
+    dest = work / "whisper.mp3"
+    run_ffmpeg([
+        "ffmpeg", "-y", "-i", str(audio),
+        "-ac", "1", "-ar", "16000", "-b:a", "64k", str(dest),
+    ])
+    if not dest.exists() or dest.stat().st_size == 0:
+        log("[!] Could not re-encode the audio; uploading it as-is.")
+        return audio
+    return dest
+
+
+def apply_music_mode(cfg: dict, log) -> dict:
+    """音乐模式下要改的几项设置。
+
+    分段调短，是因为歌里长段的纯伴奏会让 Whisper 把时间轴越推越偏；
+    段子短，偏了也只偏一段。自动字幕在这里一并关掉——音乐视频的自动
+    字幕基本没法看，反倒会把真正该转写的活儿顶掉。
+    """
+    cfg = dict(cfg)
+    cfg["chunk_seconds"] = min(int(cfg.get("chunk_seconds") or 600), MUSIC_CHUNK_SECONDS)
+    cfg["allow_auto_subs"] = False
+    if cfg.get("music_prompt"):
+        cfg["prompt"] = cfg["music_prompt"]
+    log(f"[+] Music mode: {cfg['chunk_seconds'] // 60}-minute chunks, lyrics prompt.")
+    return cfg
 
 
 def split_audio(audio: Path, work: Path, chunk_seconds: int, log) -> list[tuple[Path, float]]:
@@ -196,14 +242,18 @@ def split_audio(audio: Path, work: Path, chunk_seconds: int, log) -> list[tuple[
 
     parts_dir = work / "parts"
     parts_dir.mkdir(exist_ok=True)
+    # 分段用的是 -c copy，容器得跟原文件一致：把 webm 的音频原样倒进 .mp3
+    # 里 ffmpeg 会直接拒绝，一段都切不出来。正常路线拿到的就是 mp3，
+    # 音乐模式下重编码失败退回原始文件时，这里才派上用场。
+    suffix = audio.suffix.lower() or ".mp3"
     run_ffmpeg([
         "ffmpeg", "-y", "-i", str(audio),
         "-f", "segment", "-segment_time", str(chunk_seconds),
         "-c", "copy", "-reset_timestamps", "1",
-        str(parts_dir / "part_%03d.mp3"),
+        str(parts_dir / f"part_%03d{suffix}"),
     ])
 
-    parts = sorted(parts_dir.glob("part_*.mp3"))
+    parts = sorted(parts_dir.glob(f"part_*{suffix}"))
     if not parts:
         log("[!] Splitting failed; sending the whole file in one go.")
         return [(audio, 0.0)]
@@ -281,6 +331,11 @@ def process(url: str, cfg: dict, log=print, should_stop=lambda: False) -> dict:
     from groq import Groq
 
     cfg = config.active(cfg) if "languages" in cfg else cfg
+    music = bool(cfg.get("music_mode"))
+    separated = False
+    translated = False
+    if music:
+        cfg = apply_music_mode(cfg, log)
     out_dir = config.output_dir(cfg)
     work = out_dir / ".work" / uuid.uuid4().hex[:8]
     work.mkdir(parents=True, exist_ok=True)
@@ -307,9 +362,17 @@ def process(url: str, cfg: dict, log=print, should_stop=lambda: False) -> dict:
             client = Groq(api_key=key)
 
             log("[+] Downloading audio...")
-            audio = download_audio(url, work, log)
+            audio = download_audio(url, work, log, keep_quality=music)
             if should_stop():
                 raise Cancelled()
+
+            if music:
+                vocals = separate.isolate_vocals(audio, work, log, should_stop)
+                if should_stop():
+                    raise Cancelled()
+                # 分离没成功也照样往下走，只是准头回到从前。
+                separated = vocals is not None
+                audio = encode_for_whisper(vocals or audio, work, log)
 
             chunks = split_audio(audio, work, int(cfg["chunk_seconds"]), log)
             segments = transcribe_all(client, chunks, cfg, log, should_stop)
@@ -320,6 +383,8 @@ def process(url: str, cfg: dict, log=print, should_stop=lambda: False) -> dict:
 
         cues = srt.build(segments, cfg)
         log(f"[+] {len(cues)} cues left after cleanup.")
+        # 同上：勾了注音，也得 pypinyin／pykakasi 真的装了才会有那一行。
+        has_reading = bool(cfg.get("reading")) and any("\n" in c["text"] for c in cues)
 
         if cfg.get("translate") and cues:
             key = config.api_key(cfg)
@@ -334,20 +399,65 @@ def process(url: str, cfg: dict, log=print, should_stop=lambda: False) -> dict:
                     english = translations.get(i, "").strip()
                     if english:
                         cue["text"] += "\n" + english
+                        translated = True
             else:
                 log("[!] No API key; skipping translation.")
 
         dest = unique_path(out_dir / f"{safe_filename(title)}.srt")
         count = srt.write(cues, dest)
         log(f"[✓] {count} lines -> {dest}")
+
+        # 记一笔这份字幕是怎么做出来的。第二行是注音还是英文，只有这里知道；
+        # 之后预览、导出 Anki、气泡取句子都靠它，不必再去猜。
+        info = {
+            "language": cfg.get("language", "zh"),
+            "reading": has_reading,
+            # 记的是这份文件里实际有没有那一行，不是设置里勾没勾：翻译可能
+            # 因为没有密钥而整段跳过，那样记成「有翻译」，读回来就会串行。
+            "translation": translated,
+            "reading_style": cfg.get("reading_style", ""),
+            "source": source,
+            "music": music,
+            "separated": separated,
+            "created": time.time(),
+        }
+        meta.record(out_dir, dest.name, **info)
         return {"title": title, "path": str(dest), "lines": count, "source": source,
-                "language": cfg.get("language", "zh")}
+                "language": info["language"], "music": music, "separated": separated}
 
     finally:
         shutil.rmtree(work, ignore_errors=True)
         parent = out_dir / ".work"
         if parent.exists() and not any(parent.iterdir()):
             parent.rmdir()
+
+
+def sweep_work_dirs(out_dir: Path, older_than_hours: float = 6.0) -> int:
+    """清掉 .work 下面没人要的临时目录。
+
+    正常跑完会自己删干净，但进程被强杀（关掉那个黑窗口、机器重启）时来不及删，
+    半个下载好的音频就一直躺在输出目录里。开机时扫一遍。
+
+    只动够旧的：万一同时开着第二个实例，它手里那个是新的，不能碰。
+    """
+    parent = out_dir / ".work"
+    if not parent.exists():
+        return 0
+    cutoff = time.time() - older_than_hours * 3600
+    removed = 0
+    for stale in parent.iterdir():
+        try:
+            if stale.is_dir() and stale.stat().st_mtime < cutoff:
+                shutil.rmtree(stale, ignore_errors=True)
+                removed += 1
+        except OSError:
+            continue
+    try:
+        if not any(parent.iterdir()):
+            parent.rmdir()
+    except OSError:
+        pass
+    return removed
 
 
 def unique_path(path: Path) -> Path:

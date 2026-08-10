@@ -50,6 +50,31 @@
   --glass-line: rgba(255,255,255,.09);
   --glass-hi:   inset 0 1px 0 rgba(255,255,255,.07);
 
+  /* 提亮层。深色底上「往上抬一层」是加一点白，浅色底上得反过来加一点黑，
+     所以这几个值不能写死——写死了浅色主题一开，按钮和条纹就全糊成一片白。
+     后面凡是 hover、条纹、药丸底色，一律走这几个变量。 */
+  --tint-1:    rgba(255,255,255,.035);   /* 静止的面：勾选框、任务条 */
+  --tint-2:    rgba(255,255,255,.045);   /* 次要按钮、药丸 */
+  --tint-3:    rgba(255,255,255,.09);    /* 悬停 */
+  --tint-edge: rgba(255,255,255,.18);    /* 悬停时的描边 */
+  --stripe:    rgba(255,255,255,.018);   /* 字幕的斑马纹 */
+  --sink:      rgba(0,0,0,.2);           /* 往里凹的槽：语言按钮那一块 */
+  --scrim:     rgba(0,0,0,.72);          /* 浮层背后压暗的那层 */
+  --pop:       rgba(24,26,32,.94);       /* 不透明的小浮层：toast、气泡 */
+  --on-accent: #fff;                     /* 压在强调色上的字 */
+  --ink-strong:#f3f4f6;                  /* 字幕正文，比正文再亮一档 */
+  --rail-a:    rgba(36,36,41,.88);       /* 竖栏的渐变两头 */
+  --rail-b:    rgba(29,29,33,.84);
+  --opt-bg:    #212329;                  /* 下拉展开后那张系统列表 */
+  --opt-sel:   #2f333d;
+  --scheme:    dark;                     /* 滚动条、原生控件的明暗 */
+  --field:     rgba(18,19,23,.72);       /* 输入框的底 */
+  --field-solid: rgba(30,32,38,.92);     /* 下拉收起来时的底，要更实一点 */
+  --sheet:     rgba(38,38,43,.93);       /* 浮层那张卡 */
+  --well:      rgba(12,13,17,.5);        /* 凹进去的一块：任务日志 */
+  /* 下拉右边那个小箭头是画在 data URI 里的，颜色只能整条换 */
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%23cbd5e0' stroke-width='1.8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
+
   /* 竖栏跟着视口缩，别再写死 244px——中文标题一长就顶出去了 */
   --rail: clamp(224px, 20vw, 272px);
   --grove: 190px;
@@ -120,6 +145,70 @@
 }
 
 /* 「跟着语言走」：中文一套朱红，日文一套藏青 */
+/* 和纸：白天用的那套。暖白的纸、墨字，强调色全部压深——浅底上原来那几个
+   亮色会直接糊掉。提亮层同时反向：浅底上「抬一层」是压一点黑。 */
+[data-theme="washi"] {
+  --bg: #efe9dd; --panel-3: #e6dfd1; --dict: #f6f2e9; --line: #d3c9b6;
+  --ink: #2b2620; --ink-dim: #4d463c; --ink-faint: #857b6c; --ink-strong: #1c1813;
+  --word: #b03a52; --image: #a8632a; --sentence: #4a7c3f; --definition: #6f4d9e;
+  --translate: #2f6f9e; --diagram: #17726f; --gold: #9a7318; --bad: #b03a3a;
+  --glass: rgba(250,246,238,.86); --glass-3: rgba(240,234,222,.9);
+  --glass-line: rgba(60,50,35,.14); --glass-hi: inset 0 1px 0 rgba(255,255,255,.6);
+  --tint-1: rgba(60,50,35,.035); --tint-2: rgba(60,50,35,.05);
+  --tint-3: rgba(60,50,35,.1);   --tint-edge: rgba(60,50,35,.24);
+  --stripe: rgba(60,50,35,.025); --sink: rgba(60,50,35,.07);
+  --scrim: rgba(40,34,26,.42);   --pop: rgba(250,246,238,.97);
+  --on-accent: #241f18;
+  --rail-a: rgba(243,238,229,.92); --rail-b: rgba(234,228,215,.9);
+  --opt-bg: #f6f2e9; --opt-sel: #ddd4c2; --scheme: light;
+  --field: rgba(255,253,248,.85); --field-solid: rgba(247,243,235,.95);
+  --sheet: rgba(251,248,242,.97); --well: rgba(60,50,35,.06);
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%234d463c' stroke-width='1.8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
+  --shadow: 0 4px 20px rgba(70,58,40,.14);
+  --shadow-lift: 0 2px 6px rgba(70,58,40,.16), 0 26px 60px rgba(70,58,40,.22);
+}
+
+/* 白日：同样是浅色，但偏冷。屏幕亮、屋里也亮的时候用这套。 */
+[data-theme="daylight"] {
+  --bg: #eef1f5; --panel-3: #e4e8ee; --dict: #f7f9fc; --line: #c8cfd9;
+  --ink: #1f2733; --ink-dim: #414c5c; --ink-faint: #77828f; --ink-strong: #131a24;
+  --word: #b23a63; --image: #a05a1e; --sentence: #2f7a4e; --definition: #6242ab;
+  --translate: #1f6390; --diagram: #10707f; --gold: #8a6a12; --bad: #b3352f;
+  --glass: rgba(252,253,255,.88); --glass-3: rgba(238,242,247,.9);
+  --glass-line: rgba(20,32,48,.13); --glass-hi: inset 0 1px 0 rgba(255,255,255,.7);
+  --tint-1: rgba(20,32,48,.035); --tint-2: rgba(20,32,48,.05);
+  --tint-3: rgba(20,32,48,.1);   --tint-edge: rgba(20,32,48,.24);
+  --stripe: rgba(20,32,48,.025); --sink: rgba(20,32,48,.07);
+  --scrim: rgba(16,24,36,.42);   --pop: rgba(252,253,255,.97);
+  --on-accent: #141b25;
+  --rail-a: rgba(248,250,253,.93); --rail-b: rgba(238,242,248,.9);
+  --opt-bg: #f7f9fc; --opt-sel: #d6dde7; --scheme: light;
+  --field: rgba(255,255,255,.86); --field-solid: rgba(248,250,253,.95);
+  --sheet: rgba(253,254,255,.97); --well: rgba(20,32,48,.06);
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%23414c5c' stroke-width='1.8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
+  --shadow: 0 4px 20px rgba(30,45,70,.13);
+  --shadow-lift: 0 2px 6px rgba(30,45,70,.16), 0 26px 60px rgba(30,45,70,.2);
+}
+
+/* 高反差：纯黑底、几乎纯白的字。屏幕反光、或者眼睛累的时候用。 */
+[data-theme="contrast"] {
+  --bg: #000; --panel-3: #101010; --dict: #050505; --line: #4a4a4a;
+  --ink: #fff; --ink-dim: #e0e0e0; --ink-faint: #a8a8a8; --ink-strong: #fff;
+  --word: #ff9ec4; --image: #ffb86b; --sentence: #7bea9c; --definition: #c9a6ff;
+  --translate: #8ecbff; --diagram: #6ee7ea; --gold: #ffdc5e; --bad: #ff8b8b;
+  --glass: rgba(10,10,10,.92); --glass-3: rgba(0,0,0,.94);
+  --glass-line: rgba(255,255,255,.24); --glass-hi: inset 0 1px 0 rgba(255,255,255,.12);
+  --tint-1: rgba(255,255,255,.06); --tint-2: rgba(255,255,255,.08);
+  --tint-3: rgba(255,255,255,.16); --tint-edge: rgba(255,255,255,.4);
+  --stripe: rgba(255,255,255,.04); --sink: rgba(255,255,255,.05);
+  --scrim: rgba(0,0,0,.85); --pop: rgba(8,8,8,.98);
+  --rail-a: rgba(6,6,6,.94); --rail-b: rgba(0,0,0,.92);
+  --opt-bg: #0a0a0a; --opt-sel: #333;
+  --field: rgba(0,0,0,.8); --field-solid: rgba(12,12,12,.95);
+  --sheet: rgba(6,6,6,.97); --well: rgba(255,255,255,.05);
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%23ffffff' stroke-width='1.8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
+}
+
 [data-theme="lang-zh"] {
   --bg: #1e1917; --panel-3: #282020; --dict: #140f0e; --line: #3f322f;
   --ink: #f0e6e0; --ink-dim: #d3c2b9; --ink-faint: #9a867c;
@@ -160,7 +249,9 @@ body, .card, .rail, .sheet, .tag, .glyph {
 }
 
 * { box-sizing: border-box; }
-html { color-scheme: dark; }
+/* 滚动条、复选框这些是浏览器自己画的，只认 color-scheme。
+   跟着主题走，浅色主题下才不会剩一排黑方块和一条黑滚动条。 */
+html { color-scheme: var(--scheme); }
 
 body {
   margin: 0;
@@ -314,15 +405,106 @@ body > * { position: relative; z-index: 1; }
   100.000% { transform: translate3d(48.7500vw, 13.3333vh, 0); }
 }
 
-/* 换成图片或纯色时就把线路板收起来 */
-.backdrop[data-mode="image"] .pipes,
-.backdrop[data-mode="plain"] .pipes { display: none; }
-.backdrop[data-mode="circuit"] .backdrop-img,
-.backdrop[data-mode="plain"] .backdrop-img { display: none; }
+/* ---------------------------------------------------------------- 星野 */
+
+/* 三层平铺的星点。一层就是一张 background-image，平移到正好一块的高度时
+   接上下一轮，接缝对得死死的，所以看着是无限的。三层只有三个合成层，
+   比撒几十个小 div 便宜得多。 */
+.stars { position: absolute; left: 0; right: 0; top: -100%; bottom: -100%; }
+.stars i {
+  position: absolute; inset: 0;
+  background-repeat: repeat;
+  will-change: transform;
+  animation: star-drift var(--dur) linear infinite;
+}
+@keyframes star-drift { to { transform: translate3d(0, var(--tile), 0); } }
+
+.stars i:nth-child(1) {
+  --tile: 210px; --dur: 150s;
+  color: var(--ink-faint); opacity: .75;
+  background-size: 210px 210px;
+  background-image:
+    radial-gradient(1.7px 1.7px at 28px 42px,   currentColor, transparent),
+    radial-gradient(1.3px 1.3px at 146px 96px,  currentColor, transparent),
+    radial-gradient(1.9px 1.9px at 92px 176px,  currentColor, transparent);
+}
+.stars i:nth-child(2) {
+  --tile: 320px; --dur: 240s;
+  color: var(--translate); opacity: .45;
+  background-size: 320px 320px;
+  background-image:
+    radial-gradient(1.4px 1.4px at 210px 60px,  currentColor, transparent),
+    radial-gradient(1.1px 1.1px at 60px 230px,  currentColor, transparent),
+    radial-gradient(1.6px 1.6px at 268px 288px, currentColor, transparent);
+}
+/* 最慢的一层给几颗暖色的，当作离得最远的那些 */
+.stars i:nth-child(3) {
+  --tile: 460px; --dur: 380s;
+  color: var(--gold); opacity: .3;
+  background-size: 460px 460px;
+  background-image:
+    radial-gradient(2.1px 2.1px at 120px 150px, currentColor, transparent),
+    radial-gradient(1.5px 1.5px at 390px 330px, currentColor, transparent);
+}
+
+/* ---------------------------------------------------------------- 落花 */
+
+/* 一片一片往下飘，横着还带一点偏移。形状用一个对角圆角做出叶子／花瓣的样子，
+   中文是竹叶（细长、绿），日文是樱瓣（圆、粉）——跟角落里那只小动物对上。 */
+.motes { position: absolute; inset: 0; }
+.motes i {
+  position: absolute; top: -8vh;
+  width: 11px; height: 11px;
+  border-radius: 100% 0 100% 0;
+  background: currentColor;
+  color: var(--sentence);
+  will-change: transform, opacity;
+  animation: mote-fall var(--dur) linear infinite,
+             mote-fade var(--dur) ease-in-out infinite;
+  animation-delay: var(--delay), var(--delay);
+}
+:root[data-lang="ja"] .motes i {
+  color: var(--word);
+  border-radius: 100% 0 100% 40%;
+  width: 10px; height: 9px;
+}
+@keyframes mote-fall {
+  from { transform: translate3d(0, 0, 0) rotate(0deg); }
+  to   { transform: translate3d(var(--dx), 116vh, 0) rotate(var(--spin)); }
+}
+/* 两头淡出，省得看见它在半空中冒出来又凭空消失 */
+@keyframes mote-fade { 0%, 100% { opacity: 0; } 9%, 90% { opacity: .5; } }
+
+.motes i:nth-child(1)  { left:  4%; --dx:  7vw; --spin: 380deg; --dur: 15s; --delay:  -2s; }
+/* 小几号的混在里面，看着才不像一批印出来的。改宽高，不动 transform——
+   transform 归动画管，在这儿写会被直接盖掉。 */
+.motes i:nth-child(2)  { left: 13%; --dx: -5vw; --spin: -300deg; --dur: 21s; --delay:  -9s; width: 8px; height: 8px; }
+.motes i:nth-child(3)  { left: 22%; --dx:  9vw; --spin: 460deg; --dur: 18s; --delay: -14s; }
+.motes i:nth-child(4)  { left: 31%; --dx: -8vw; --spin: -420deg; --dur: 25s; --delay:  -5s; }
+.motes i:nth-child(5)  { left: 40%; --dx:  4vw; --spin: 340deg; --dur: 17s; --delay: -20s; }
+.motes i:nth-child(6)  { left: 49%; --dx: -6vw; --spin: -500deg; --dur: 23s; --delay: -11s; }
+.motes i:nth-child(7)  { left: 58%; --dx: 10vw; --spin: 400deg; --dur: 19s; --delay:  -3s; }
+.motes i:nth-child(8)  { left: 66%; --dx: -4vw; --spin: -360deg; --dur: 27s; --delay: -17s; }
+.motes i:nth-child(9)  { left: 74%; --dx:  6vw; --spin: 520deg; --dur: 16s; --delay:  -7s; }
+.motes i:nth-child(10) { left: 82%; --dx: -9vw; --spin: -380deg; --dur: 22s; --delay: -24s; }
+.motes i:nth-child(11) { left: 90%; --dx:  5vw; --spin: 300deg; --dur: 20s; --delay: -13s; }
+.motes i:nth-child(12) { left: 96%; --dx: -7vw; --spin: -440deg; --dur: 26s; --delay:  -1s; }
+
+/* 一次只显示一套背景 */
+.backdrop:not([data-mode="circuit"]) .pipes { display: none; }
+.backdrop:not([data-mode="image"]) .backdrop-img { display: none; }
+.backdrop:not([data-mode="stars"]) .stars { display: none; }
+.backdrop:not([data-mode="petals"]) .motes { display: none; }
+/* 星野和落花自带动静，光点就别再掺和了 */
+.backdrop[data-mode="stars"] .sparks,
+.backdrop[data-mode="petals"] .sparks { display: none; }
 
 /* 关掉动画：一个开关全停。老机器上这是最有效的一招——
    停掉之后整页没有任何持续动画，浏览器可以完全不出帧。 */
-:root[data-motion="off"] .sparks { display: none; }
+:root[data-motion="off"] .sparks,
+:root[data-motion="off"] .motes { display: none; }
+/* 星野只剩一张静止的星图，不动了但还看得见——它本来就是背景 */
+:root[data-motion="off"] .stars i { animation: none; }
 :root[data-motion="off"] .orbit,
 :root[data-motion="off"] .k-tail,
 :root[data-motion="off"] .ripple,
@@ -332,6 +514,8 @@ body > * { position: relative; z-index: 1; }
 /* 页面切到后台就把光点停住。浏览器多半会自己节流，但窗口只是失焦
    （比如你在看别的窗口）时不一定停，这条能兜住。 */
 :root[data-idle="1"] .spark,
+:root[data-idle="1"] .stars i,
+:root[data-idle="1"] .motes i,
 :root[data-idle="1"] .orbit,
 :root[data-idle="1"] .k-tail,
 :root[data-idle="1"] .ripple,
@@ -380,7 +564,7 @@ h2 { font-size: 15px; font-weight: 600; color: var(--ink); }
   display: flex; flex-direction: column; gap: 20px;
   padding: 20px 18px calc(20px + var(--sa-b));
   padding-left: calc(18px + var(--sa-l));
-  background: linear-gradient(to bottom, rgba(36,36,41,.88), rgba(29,29,33,.84));
+  background: linear-gradient(to bottom, var(--rail-a), var(--rail-b));
   border-right: 1px solid var(--glass-line);
   box-shadow: var(--glass-hi);
   /* 矮屏幕上竖栏本来会被 overflow:hidden 直接切掉，改成能滚 */
@@ -403,7 +587,7 @@ h2 { font-size: 15px; font-weight: 600; color: var(--ink); }
   width: 44px; height: 44px; flex: none;
   display: grid; place-items: center;
   border-radius: 12px;
-  font-family: var(--han); font-size: 26px; color: #fff;
+  font-family: var(--han); font-size: 26px; color: var(--on-accent);
   background: var(--dict);
   border: 1px solid var(--line);
   border-left: 3px solid var(--word);
@@ -425,7 +609,7 @@ h2 { font-size: 15px; font-weight: 600; color: var(--ink); }
   display: flex; flex-direction: column; gap: 5px;
   padding: 5px;
   border: 1px solid var(--glass-line); border-radius: var(--r);
-  background: rgba(0,0,0,.2);
+  background: var(--sink);
   box-shadow: var(--glass-hi);
 }
 .lang {
@@ -439,7 +623,7 @@ h2 { font-size: 15px; font-weight: 600; color: var(--ink); }
 }
 .lang:hover { color: var(--ink-dim); background: var(--panel-3); }
 .lang.on {
-  color: #fff;
+  color: var(--on-accent);
   background: rgba(159,122,234,.12);
   border-left-color: var(--definition);
 }
@@ -464,7 +648,7 @@ h2 { font-size: 15px; font-weight: 600; color: var(--ink); }
 }
 .stats dd.bump { animation: bump .45s cubic-bezier(.2,.9,.3,1); }
 @keyframes bump {
-  0% { transform: scale(1); } 45% { transform: scale(1.35); color: #fff; } 100% { transform: scale(1); }
+  0% { transform: scale(1); } 45% { transform: scale(1.35); color: var(--on-accent); } 100% { transform: scale(1); }
 }
 
 .rail-foot { margin-top: auto; display: grid; gap: 10px; padding-bottom: var(--grove); }
@@ -481,7 +665,7 @@ h2 { font-size: 15px; font-weight: 600; color: var(--ink); }
 .pill {
   font-size: 11px; padding: 3px 10px; border-radius: 6px;
   border: 1px solid var(--glass-line); border-left: 3px solid var(--ink-faint);
-  background: rgba(255,255,255,.04); color: var(--ink-faint);
+  background: var(--tint-2); color: var(--ink-faint);
   white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
 }
 .pill.ok   { color: var(--sentence); border-left-color: var(--sentence); }
@@ -533,7 +717,7 @@ main {
 textarea, input[type=text], input[type=password], input[type=number], select {
   width: 100%; max-width: 100%;
   color: var(--ink);
-  background: rgba(18,19,23,.72);
+  background: var(--field);
   border: 1px solid var(--glass-line);
   border-radius: var(--r-sm);
   padding: 11px 13px;
@@ -553,26 +737,26 @@ textarea:focus, input:focus, select:focus {
 
 select {
   appearance: none; padding-right: 34px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%23cbd5e0' stroke-width='1.8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
+  background-image: var(--chevron);
   background-repeat: no-repeat; background-position: right 12px center;
   /* 收起来的时候底色要比输入框实一点，不然看不出这是可以点开的 */
-  background-color: rgba(30,32,38,.92);
+  background-color: var(--field-solid);
   color: var(--ink);
   cursor: pointer;
   text-overflow: ellipsis;
 }
-select:hover { border-color: rgba(255,255,255,.2); }
+select:hover { border-color: var(--tint-edge); }
 
 /* 展开后的那张列表是系统画的，只认这几条：color-scheme 决定滚动条和边框，
    option 的前景背景得自己写死，否则 Windows 上会给你一张白底。 */
-select, option, optgroup { color-scheme: dark; }
+select, option, optgroup { color-scheme: var(--scheme); }
 select option {
-  background-color: #212329;
+  background-color: var(--opt-bg);
   color: var(--ink);
   padding: 8px 10px;
 }
 select option:checked,
-select option:hover { background-color: #2f333d; color: #fff; }
+select option:hover { background-color: var(--opt-sel); color: var(--on-accent); }
 select option:disabled { color: var(--ink-faint); }
 select.mini { width: auto; min-width: 0; flex: 1 1 168px; max-width: 220px; padding: 9px 32px 9px 12px; font-size: 12.5px; }
 
@@ -590,7 +774,7 @@ select.mini { width: auto; min-width: 0; flex: 1 1 168px; max-width: 220px; padd
   display: flex; align-items: center; gap: 7px;
   padding: 6px 12px;
   border: 1px solid var(--glass-line); border-radius: 7px;
-  background: rgba(255,255,255,.035);
+  background: var(--tint-1);
   font-size: 12.5px; color: var(--ink-dim);
   cursor: pointer; user-select: none;
   transition: background .15s ease, color .15s ease, border-color .15s ease;
@@ -612,7 +796,7 @@ button {
 button:active { transform: translateY(1px); }
 
 .primary {
-  color: #fff; font-weight: 600;
+  color: var(--on-accent); font-weight: 600;
   background: rgba(72,187,120,.16);
   border-color: rgba(72,187,120,.45);
   border-left: 3px solid var(--sentence);
@@ -621,11 +805,11 @@ button:active { transform: translateY(1px); }
 .primary:disabled { opacity: .45; cursor: default; }
 
 .ghost {
-  background: rgba(255,255,255,.045);
+  background: var(--tint-2);
   border-color: var(--glass-line); color: var(--ink-dim);
   box-shadow: var(--glass-hi);
 }
-.ghost:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.18); color: var(--ink); }
+.ghost:hover { background: var(--tint-3); border-color: var(--tint-edge); color: var(--ink); }
 .small { padding: 6px 11px; font-size: 12px; }
 
 .toggle.on { color: var(--gold); border-color: rgba(255,204,77,.4); background: rgba(255,204,77,.08); }
@@ -642,7 +826,7 @@ button:active { transform: translateY(1px); }
   border: 1px solid var(--glass-line);
   border-left: 3px solid var(--line);
   border-radius: var(--r-sm);
-  background: rgba(255,255,255,.035);
+  background: var(--tint-1);
   box-shadow: var(--glass-hi);
   overflow: hidden;
   transition: border-color .18s ease;
@@ -678,7 +862,7 @@ button:active { transform: translateY(1px); }
 
 .job-log {
   border-top: 1px solid var(--glass-line);
-  background: rgba(12,13,17,.5);
+  background: var(--well);
   padding: 12px 14px;
   max-height: min(250px, 34vh); overflow-y: auto;
   overscroll-behavior: contain;
@@ -698,21 +882,49 @@ button:active { transform: translateY(1px); }
   max-height: clamp(240px, 52vh, 520px); overflow-y: auto; overflow-x: hidden;
   overscroll-behavior: contain;
 }
+/* 列表上方那句说明：这些东西是能点的。原来只有鼠标压上去才有一点反应，
+   不主动去试就不会知道，预览、查词、导出这一整套都被藏在后面。 */
+.list-hint {
+  margin: 0 0 8px; font-size: 11.5px; font-style: italic;
+  color: var(--ink-faint); line-height: 1.4;
+}
+
 .files li {
   display: flex; align-items: center; gap: 12px; min-width: 0;
   padding: 10px 12px;
-  border: 1px solid transparent; border-left: 3px solid transparent;
+  /* 静止时就带一道底和一条左边框，看着像一排按钮，不是一排文字 */
+  background: var(--tint-1);
+  border: 1px solid var(--glass-line); border-left: 3px solid var(--translate);
   border-radius: 6px;
   font-size: 13.5px; cursor: pointer;
-  transition: background .14s ease, border-color .14s ease;
+  transition: background .14s ease, border-color .14s ease, transform .1s ease;
 }
 .files li:hover {
-  background: rgba(99,179,237,.07);
-  border-color: rgba(99,179,237,.2);
+  background: rgba(99,179,237,.1);
+  border-color: rgba(99,179,237,.35);
   border-left-color: var(--translate);
+  transform: translateX(2px);
 }
+.files li:active { transform: translateX(2px) translateY(1px); }
+
+/* 行尾一个箭头，摆明了「点进去」。平时淡，移上去就亮起来往右挪一点。 */
+.files li::after {
+  content: "→";
+  flex: none;
+  font-family: var(--mono); font-size: 12px;
+  color: var(--translate); opacity: .35;
+  transition: opacity .14s ease, transform .14s ease;
+}
+.files li:hover::after { opacity: 1; transform: translateX(3px); }
+/* 触屏上没有 hover，箭头就一直亮着 */
+@media (hover: none) { .files li::after { opacity: .7; } }
 .files .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .files .meta { font-size: 11px; color: var(--ink-faint); white-space: nowrap; font-family: var(--mono); }
+/* 「注 EN ♪」这几个小标记：这份字幕里有注音行、有英文行、是音乐模式做的 */
+.files .marks { color: var(--gold); opacity: .8; letter-spacing: .5px; }
+
+/* Demucs 没装时，音乐模式那个勾选框压暗一档——还是能勾，只是先说清楚 */
+.chk.dim { opacity: .6; }
 .files mark { background: rgba(255,204,77,.22); color: var(--gold); border-radius: 2px; }
 
 /* ------------------------------------------------------------------ 浮层 */
@@ -721,7 +933,7 @@ button:active { transform: translateY(1px); }
   position: fixed; inset: 0; z-index: 30;
   display: grid; place-items: center;
   padding: clamp(10px, 2.5vw, 26px);
-  background: rgba(0,0,0,.72);
+  background: var(--scrim);
   animation: fade .18s ease;
 }
 .overlay[hidden] { display: none; }
@@ -737,7 +949,7 @@ button:active { transform: translateY(1px); }
   overflow-y: auto; overscroll-behavior: contain;
   padding: clamp(15px, 2vw, 20px) clamp(16px, 2.4vw, 24px) clamp(16px, 2.2vw, 22px);
   /* 底下的 overlay 已经把整屏模糊过了，这里再来一次等于白花钱 */
-  background: rgba(38,38,43,.93);
+  background: var(--sheet);
   border: 1px solid var(--glass-line);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-lift), var(--glass-hi);
@@ -814,30 +1026,53 @@ button:active { transform: translateY(1px); }
 
 /* 每条字幕就是一张小卡片：正文大、拼音金色、译文灰。 */
 .cue {
-  display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 14px;
+  display: grid; grid-template-columns: 76px minmax(0, 1fr) 24px; gap: 14px;
   padding: 11px 12px;
   border-radius: 8px;
   border-left: 3px solid transparent;
   cursor: pointer;
   transition: background .12s ease, border-color .12s ease;
 }
-.cue > div { min-width: 0; overflow-wrap: anywhere; }
+/* 三块各就各位，别让自动排布把星星挤到下一行去 */
+.cue time  { grid-area: 1 / 1; }
+.cue > div { grid-area: 1 / 2; min-width: 0; overflow-wrap: anywhere; }
+.cue .star { grid-area: 1 / 3; }
 /* 一集字幕上千条，滚不到的就先别排版。auto 会记住量过的真实高度，
    所以滚动条不会乱跳。 */
 .cue { content-visibility: auto; contain-intrinsic-size: auto 76px; }
 /* 窄屏把时间轴挪到上面一行，省下来的宽度全给正文 */
 @media (max-width: 620px) {
-  .cue { grid-template-columns: minmax(0, 1fr); gap: 2px; }
-  .cue time { padding-top: 0; }
+  .cue { grid-template-columns: minmax(0, 1fr) 24px; gap: 2px 10px; }
+  .cue time  { padding-top: 0; grid-area: 1 / 1; }
+  .cue > div { grid-area: 2 / 1 / 3 / 3; }
+  .cue .star { grid-area: 1 / 2; }
 }
-.cue:nth-child(odd) { background: rgba(255,255,255,.018); }
+.cue:nth-child(odd) { background: var(--stripe); }
 .cue:hover { background: rgba(72,187,120,.06); border-left-color: var(--sentence); }
 .cue.sel { background: rgba(159,122,234,.1); border-left-color: var(--definition); }
 .cue.copied { animation: flash .5s ease; }
+
+/* 挖词用的星标。平时几乎看不见，鼠标移到那一行才浮出来；加过星的一直亮着。 */
+.star {
+  padding: 0; width: 24px; height: 24px;
+  border: 0; background: none; box-shadow: none;
+  font-size: 15px; line-height: 1;
+  color: var(--ink-faint); opacity: 0;
+  transition: opacity .14s ease, color .14s ease, transform .12s ease;
+}
+.cue:hover .star, .cue.sel .star { opacity: .5; }
+.star:hover { opacity: 1; color: var(--gold); transform: scale(1.2); }
+.cue.starred .star { opacity: 1; color: var(--gold); }
+.cue.starred { border-left-color: var(--gold); }
+/* 触屏上没有 hover，星星就一直留着一点影子，不然根本点不着 */
+@media (hover: none) { .star { opacity: .35; } }
+
+/* 加过星之后，工具栏那个 ★ 按钮自己也亮一下，好知道现在有几条 */
+.toggle.has { color: var(--gold); border-color: rgba(255,204,77,.3); }
 @keyframes flash { 0% { background: rgba(72,187,120,.3); } 100% { background: transparent; } }
 
 .cue time { padding-top: 6px; font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); opacity: .65; }
-.cue .zh { font-family: var(--serif); font-size: clamp(17px, 1.5vw + 8px, 21px); line-height: 1.6; color: #f3f4f6; }
+.cue .zh { font-family: var(--serif); font-size: clamp(17px, 1.5vw + 8px, 21px); line-height: 1.6; color: var(--ink-strong); }
 .cue .reading { margin-top: 2px; font-family: var(--read); font-size: 14px; color: var(--gold); line-height: 1.5; }
 .cue .trans { margin-top: 3px; font-size: 13px; line-height: 1.55; color: var(--ink-dim); }
 .cue mark { background: rgba(255,204,77,.25); color: var(--gold); border-radius: 2px; }
@@ -897,11 +1132,12 @@ button:active { transform: translateY(1px); }
   display: flex; align-items: baseline; gap: 6px;
   padding: 4px 9px;
   border: 1px solid var(--glass-line); border-radius: 6px;
-  background: rgba(255,255,255,.04);
+  background: var(--tint-2);
   cursor: pointer;
   transition: border-color .14s ease, background .14s ease;
 }
-.chips li:hover { border-color: var(--sentence); background: rgba(255,255,255,.08); }
+.chips li:hover { border-color: var(--sentence); background: var(--tint-3); }
+#words-anki { margin-top: 10px; }
 .chips .w { font-family: var(--han); font-size: 15px; color: var(--ink); }
 .chips .r { font-family: var(--read); font-size: 11px; color: var(--gold); opacity: .85; }
 .chips .n {
@@ -945,7 +1181,7 @@ kbd {
 }
 .toast {
   padding: 10px 16px;
-  background: rgba(32,34,40,.94);
+  background: var(--pop);
   border: 1px solid var(--glass-line); border-left: 3px solid var(--sentence);
   border-radius: var(--r-sm);
   font-size: 13px; color: var(--ink);
@@ -1065,7 +1301,7 @@ kbd {
   transform: translateX(-46%);
   display: grid; gap: 1px; justify-items: center;
   padding: 8px 13px;
-  background: rgba(24,26,32,.94);
+  background: var(--pop);
   border: 1px solid var(--glass-line); border-left: 3px solid var(--word);
   border-radius: var(--r-sm);
   box-shadow: var(--shadow), var(--glass-hi);
@@ -1082,7 +1318,7 @@ kbd {
   background: var(--dict); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
 }
 @keyframes bubble-in { from { opacity: 0; transform: translateX(-46%) translateY(6px) scale(.95); } }
-.bubble-han { font-family: var(--han); font-size: 19px; color: #fff; }
+.bubble-han { font-family: var(--han); font-size: 19px; color: var(--ink-strong); }
 .bubble-pin { font-family: var(--read); font-size: 12px; color: var(--gold); }
 .bubble-en  { font-size: 11px; color: var(--ink-faint); font-style: italic; }
 

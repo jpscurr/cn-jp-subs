@@ -6,11 +6,15 @@ let cfg = {};        // 完整设置，包含每种语言各自的配置
 let active = {};     // 当前语言的设置，已压平
 let langs = [];      // 服务端给出的语言定义
 let models = { whisper: [], chat: [] };
+let env = {};        // 服务端那边装了什么（ffmpeg、demucs、注音相关的库……）
 
 let allFiles = [];   // 未过滤的文件列表
 let cues = [];       // 当前预览的字幕
+let cueLayout = {};  // 这份字幕有没有注音行／英文行，生成时记下来的
 let cueIndex = -1;   // j/k 选中的那一条
 let currentFile = "";
+const starred = new Set();   // 当前文件里挑出来要做成卡片的行号
+let starOnly = false;        // 列表是否只显示加了星的
 let sessionCount = 0;
 let sessionStart = Date.now();
 
@@ -127,6 +131,13 @@ function wireUp() {
   };
   $("cue-copy").onclick = copyAllCues;
   $("cue-download").onclick = downloadCues;
+  $("words-anki").onclick = wordsAnki;
+  $("toggle-starred").onclick = () => {
+    if (!starred.size && !starOnly) { toast("Star a line first — click the ★ on it.", "bad"); return; }
+    starOnly = $("toggle-starred").classList.toggle("on");
+    renderCues();
+    $("preview-cues").scrollTop = 0;
+  };
 
   document.addEventListener("keydown", shortcuts);
   for (const overlay of document.querySelectorAll(".overlay")) {
@@ -137,6 +148,20 @@ function wireUp() {
                            ["opt-reading", "reading"], ["opt-translate", "translate"]]) {
     $(id).onchange = () => patch({ [key]: $(id).checked });
   }
+
+  // 音乐模式：开关本身照常存，但 Demucs 没装就先说清楚会发生什么——
+  // 不拦着，没装也能跑，只是分不了人声，准头回到从前。
+  $("opt-music").onchange = async () => {
+    const on = $("opt-music").checked;
+    await patch({ music_mode: on });
+    renderHealth();
+    if (!on) setHint("Music mode off.");
+    else if (env.demucs) setHint("Music mode on — vocals get split off the backing track first.");
+    else {
+      setHint("Music mode on, but Demucs is not installed — run: pip install demucs", true);
+      toast("Music mode needs Demucs to split vocals. Without it you just get the lyrics prompt.", "gold");
+    }
+  };
   $("opt-model").onchange = () => patch({ model: $("opt-model").value });
 
   // 把链接拖到窗口里也能用
@@ -173,7 +198,18 @@ function shortcuts(e) {
   else if (e.key === "s") { e.preventDefault(); openSettings(); }
   else if (e.key === "l") { e.preventDefault(); openLookup(); }
   else if (e.key === "t") { e.preventDefault(); cycleTheme(); }
+  else if (e.key === "b") { e.preventDefault(); cycleBackground(); }
   else if (e.key === "i" && previewOpen) { e.preventDefault(); toggleInsights(); }
+  else if (e.key === "m" && previewOpen) { e.preventDefault(); starSelected(); }
+  else if (e.key === "a" && previewOpen) { e.preventDefault(); ankiExport(); }
+}
+
+// j/k 选中一条，m 给它加星。全程不碰鼠标，一集过下来能挑得很快。
+function starSelected() {
+  const node = $("preview-cues").querySelector(".cue.sel");
+  if (!node) { toast("Pick a line with j / k first.", "bad"); return; }
+  toggleStar(Number(node.dataset.i), node);
+  toast(starred.has(Number(node.dataset.i)) ? "Starred." : "Unstarred.");
 }
 
 // ---------------------------------------------------------------- 状态
@@ -183,9 +219,10 @@ async function refreshState() {
   cfg = data.config;
   active = data.active;
   langs = data.languages;
+  env = data.env || {};
   renderLanguages();
   renderTags();
-  renderHealth(data.env);
+  renderHealth();
   applyConfigToControls();
   jobs.clear();
   for (const job of data.jobs) jobs.set(job.id, job);
@@ -250,6 +287,11 @@ function applyConfigToControls() {
   $("opt-auto").checked = !!cfg.allow_auto_subs;
   $("opt-reading").checked = !!cfg.reading;
   $("opt-translate").checked = !!cfg.translate;
+  $("opt-music").checked = !!cfg.music_mode;
+  $("row-music").classList.toggle("dim", !env.demucs);
+  $("row-music").title = env.demucs
+    ? "Split the vocals off the backing track before transcribing"
+    : "Demucs is not installed — pip install demucs";
   fillSelect($("opt-model"), models.whisper.length ? models.whisper : FALLBACK_WHISPER, cfg.model);
 }
 
@@ -275,14 +317,16 @@ async function patch(fields) {
   active = data.active;
 }
 
-function renderHealth(env) {
+function renderHealth() {
   const pills = [];
-  if (env.ffmpeg_missing.length) pills.push(["bad", `${env.ffmpeg_missing.join(", ")} missing`]);
+  if (env.ffmpeg_missing?.length) pills.push(["bad", `${env.ffmpeg_missing.join(", ")} missing`]);
   else pills.push(["ok", "ffmpeg"]);
   pills.push(cfg.api_key ? ["ok", env.key_from_env ? "key (env)" : "key"] : ["bad", "no key"]);
   if (!env.reading_ok) pills.push(["warn", `${currentLang().reading_label || "reading"} support missing`]);
   else if (cfg.language === "zh" && !env.segmenter) pills.push(["warn", "jieba missing"]);
   if (cfg.language === "zh" && !env.opencc) pills.push(["warn", "opencc missing"]);
+  // Demucs 只在你真的想用音乐模式时才值得说一句，平时不占位置
+  if (cfg.music_mode) pills.push(env.demucs ? ["ok", "demucs"] : ["warn", "demucs missing"]);
   $("health").innerHTML = pills
     .map(([kind, label]) => `<span class="pill ${kind}">${esc(label)}</span>`).join("");
 }
@@ -381,6 +425,7 @@ function connectStream() {
 function renderQueue() {
   const list = [...jobs.values()];
   $("queue-empty").hidden = list.length > 0;
+  $("queue-hint").hidden = list.length === 0;
   const container = $("queue");
   container.innerHTML = "";
 
@@ -448,7 +493,7 @@ function refreshJob(job) {
     bar.remove();
   }
 
-  const actions = node.querySelector("[data-cancel], [data-view]");
+  const actions = node.querySelector("[data-cancel], [data-view], [data-retry]");
   const markup = actionButtons(job);
   if (actions && !markup) actions.remove();
   else if (actions) actions.outerHTML = markup;
@@ -463,6 +508,13 @@ function wireJobButtons(node, job) {
   if (cancelBtn) cancelBtn.onclick = () => fetch(`/api/jobs/${job.id}/cancel`, { method: "POST" });
   const viewBtn = node.querySelector("[data-view]");
   if (viewBtn) viewBtn.onclick = () => preview(viewBtn.dataset.view);
+  const retryBtn = node.querySelector("[data-retry]");
+  if (retryBtn) retryBtn.onclick = async () => {
+    retryBtn.disabled = true;
+    const res = await fetch(`/api/jobs/${job.id}/retry`, { method: "POST" });
+    if (res.ok) toast("Queued again.");
+    else { retryBtn.disabled = false; toast("Could not retry that one.", "bad"); }
+  };
 }
 
 function elapsed(job) {
@@ -489,6 +541,11 @@ function statusLine(job) {
 function actionButtons(job) {
   if (job.status === "queued" || job.status === "running") {
     return `<button class="ghost small" data-cancel>Cancel</button>`;
+  }
+  // 失败多半是网络抖了一下或者上传超时，重来一次就好。用的还是它当初那份
+  // 设置，中途换了语言也不会把它扔进另一个目录。
+  if (job.status === "failed" || job.status === "cancelled") {
+    return `<button class="ghost small" data-retry>Retry</button>`;
   }
   if (job.status === "done" && job.result && job.language === cfg.language) {
     const name = job.result.path.split(/[\\/]/).pop();
@@ -537,6 +594,8 @@ function renderFiles() {
   const shown = term ? allFiles.filter((f) => f.name.toLowerCase().includes(term)) : allFiles;
 
   $("files-empty").hidden = shown.length > 0;
+  // 一个文件都没有的时候就别说「点一个文件」了
+  $("files-hint").hidden = shown.length === 0;
   $("files-empty").textContent = term
     ? "Nothing matches that."
     : `Nothing here yet — ${currentLang().name || ""} subtitles land in this folder.`;
@@ -544,9 +603,19 @@ function renderFiles() {
   $("files").innerHTML = shown.map((f) => `
     <li data-name="${esc(f.name)}">
       <span class="name">${highlight(f.name, term)}</span>
-      <span class="meta">${new Date(f.modified * 1000).toLocaleDateString()} · ${kb(f.size)}</span>
+      <span class="meta">${new Date(f.modified * 1000).toLocaleDateString()} · ${kb(f.size)}${fileMarks(f)}</span>
     </li>`).join("");
   for (const li of $("files").children) li.onclick = () => preview(li.dataset.name);
+}
+
+// 文件名后面那几个小标记：这份字幕里有什么。生成时记下来的，
+// 老文件没有记录就什么也不显示。
+const MARKS = { reading: "注", translation: "EN", music: "♪" };
+
+function fileMarks(file) {
+  const marks = (file.marks || []).map((m) => MARKS[m]).filter(Boolean);
+  if (!marks.length) return "";
+  return ` · <span class="marks">${marks.map(esc).join(" ")}</span>`;
 }
 
 function kb(bytes) {
@@ -571,6 +640,11 @@ async function preview(name) {
   const data = await res.json();
   currentFile = data.name;
   cues = data.cues;
+  // 服务端记着这份字幕有没有注音行、有没有英文行。有记录就不用猜第二行是什么。
+  cueLayout = data.layout || {};
+  loadStars();
+  starOnly = false;
+  $("toggle-starred").classList.remove("on");
   cueIndex = -1;
   // 换文件了，上一份分析作废，面板也收回去
   insights = null;
@@ -588,30 +662,33 @@ async function preview(name) {
 
 function renderCues() {
   const term = $("cue-search").value.trim().toLowerCase();
-  const shown = term
-    ? cues.map((c, i) => ({ ...c, i })).filter((c) => c.text.toLowerCase().includes(term))
-    : cues.map((c, i) => ({ ...c, i }));
+  let shown = cues.map((c, i) => ({ ...c, i }));
+  if (term) shown = shown.filter((c) => c.text.toLowerCase().includes(term));
+  if (starOnly) shown = shown.filter((c) => starred.has(c.i));
 
-  $("cue-count").textContent = term
-    ? `${shown.length} of ${cues.length} lines match`
+  const filtered = term || starOnly;
+  $("cue-count").textContent = filtered
+    ? `${shown.length} of ${cues.length} lines shown`
     : `${cues.length} lines`;
 
   $("preview-cues").innerHTML = shown.map((cue) => {
-    const [head, ...rest] = cue.text.split("\n");
-    // 第二行是注音，第三行才是英文——生成时就是这个顺序。
-    const reading = rest.length > 1 ? rest[0] : (looksLikeReading(rest[0]) ? rest[0] : "");
-    const trans = rest.length > 1 ? rest.slice(1).join(" ") : (reading ? "" : rest[0] || "");
-    return `<div class="cue" data-i="${cue.i}">
+    const { head, reading, trans } = splitCue(cue.text);
+    return `<div class="cue${starred.has(cue.i) ? " starred" : ""}" data-i="${cue.i}">
       <time>${clock(cue.start)}</time>
       <div>
         <div class="zh">${highlight(head, term)}</div>
         ${reading ? `<div class="reading">${highlight(reading, term)}</div>` : ""}
         ${trans ? `<div class="trans">${highlight(trans, term)}</div>` : ""}
       </div>
+      <button class="star" data-star="${cue.i}" title="Star this line for mining (m)">★</button>
     </div>`;
   }).join("");
 
   for (const node of $("preview-cues").children) {
+    node.querySelector("[data-star]").onclick = (e) => {
+      e.stopPropagation();               // 点星星就只是加星，别顺手把整行复制了
+      toggleStar(Number(node.dataset.i), node);
+    };
     node.onclick = () => {
       // 自测模式下先当「揭开」用：没有鼠标的机器全靠这一下，
       // 揭开之后再点才是复制，不然想看一眼答案就得被塞一条 toast。
@@ -619,12 +696,71 @@ function renderCues() {
         node.classList.add("reveal");
         return;
       }
-      const line = cues[Number(node.dataset.i)].text.split("\n")[0];
-      copy(line);
+      copy(splitCue(cues[Number(node.dataset.i)].text).head);
       node.classList.remove("copied"); void node.offsetWidth; node.classList.add("copied");
       toast("Copied that line.");
     };
   }
+}
+
+// 把一条字幕拆成 原文 / 注音 / 英文 三块。
+//
+// 三行的时候顺序是死的，不用想。只有两行时才要判断那一行是注音还是英文——
+// 生成这份文件时记下来的 layout 说了算：勾了注音没勾翻译，那就是注音。两项
+// 都开的文件里，某一句的注音行可能是空的（整句都是拉丁字母），这时只能猜；
+// 以前做的老文件没有记录，也只能猜。
+function splitCue(text) {
+  const lines = (text || "").split("\n").filter((l) => l.trim());
+  if (!lines.length) return { head: "", reading: "", trans: "" };
+  const [head, ...rest] = lines;
+  if (!rest.length) return { head, reading: "", trans: "" };
+  if (rest.length > 1) return { head, reading: rest[0], trans: rest.slice(1).join(" ") };
+
+  const { reading: hasReading, translation: hasTrans } = cueLayout;
+  if (hasReading && !hasTrans) return { head, reading: rest[0], trans: "" };
+  if (hasTrans && !hasReading) return { head, reading: "", trans: rest[0] };
+  return looksLikeReading(rest[0])
+    ? { head, reading: rest[0], trans: "" }
+    : { head, reading: "", trans: rest[0] };
+}
+
+// ---------------------------------------------------------------- 加星
+
+// 挑出来要做成卡片的句子。存在浏览器里，按文件分开——挖词往往要分好几次，
+// 关掉窗口再回来，星标还在。
+const STAR_KEY = "subs.starred";
+
+function loadStars() {
+  starred.clear();
+  try {
+    const all = JSON.parse(localStorage.getItem(STAR_KEY) || "{}");
+    for (const i of all[currentFile] || []) starred.add(i);
+  } catch {}
+  renderStarCount();
+}
+
+function saveStars() {
+  try {
+    const all = JSON.parse(localStorage.getItem(STAR_KEY) || "{}");
+    if (starred.size) all[currentFile] = [...starred].sort((a, b) => a - b);
+    else delete all[currentFile];
+    localStorage.setItem(STAR_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+function toggleStar(index, node) {
+  starred.has(index) ? starred.delete(index) : starred.add(index);
+  saveStars();
+  renderStarCount();
+  // 只看星标的时候取消一条，那一行就该当场消失，得整体重排；
+  // 平时改一个 class 就够，不必动整份列表。
+  if (starOnly) renderCues();
+  else if (node) node.classList.toggle("starred", starred.has(index));
+}
+
+function renderStarCount() {
+  $("star-count").textContent = starred.size;
+  $("toggle-starred").classList.toggle("has", starred.size > 0);
 }
 
 // 触屏／笔没有 hover。matchMedia 比 'ontouchstart' in window 靠谱：
@@ -633,10 +769,29 @@ function canHover() {
   return matchMedia("(hover: hover)").matches;
 }
 
-// 注音行没有汉字/假名，只有字母和声调符号——用这个把它跟英文行分开。
+// 没有 layout 记录时的兜底判断：这一行是注音还是英文。
+// 跟 cnsubs/meta.py 里那份是同一套规则，改一边就得改另一边。
+//
+// 原来只认拼音的声调符号，日文的假名注音一条都对不上，于是全被当成英文：
+// 预览里串到译文那一行，导出 Anki 时更是直接填错字段。
+const RE_KANA_ONLY = /^[぀-ヿ、。！？，\s,.!?'"()·…]+$/;
+const RE_CJK  = /[一-鿿㐀-䶿぀-ヿ]/;
+const RE_TONE = /[āáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ]/i;
+const RE_MACRON = /[āīūēōâîûêô]/i;
+// 英文译文里几乎必然出现的功能词。罗马字注音里不会成串地出现。
+const RE_ENGLISH = /\b(the|a|an|and|is|are|was|were|be|been|to|of|in|on|it|its|that|this|you|your|i|we|he|she|they|not|but|for|with|have|has|had|what|why|how|there|here|about|from|will|would|can|could|do|does|did)\b/gi;
+
 function looksLikeReading(line) {
+  line = (line || "").trim();
   if (!line) return false;
-  return !/[\u4e00-\u9fff\u3040-\u30ff]/.test(line) && /[āáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ]/i.test(line);
+  if (RE_KANA_ONLY.test(line)) return true;       // 假名注音
+  if (RE_CJK.test(line)) return false;            // 注音行里绝不会有汉字
+  if (RE_TONE.test(line)) return true;            // 带声调符号的拼音
+  if (line !== line.toLowerCase()) return false;  // 有大写字母，是英文句子
+  // 罗马字里「と」就写作 to，正好撞上英文的 to，所以要凑够两个不同的功能词
+  const hits = new Set((line.match(RE_ENGLISH) || []).map((w) => w.toLowerCase()));
+  if (hits.size >= 2) return false;
+  return RE_MACRON.test(line) || line.split(/\s+/).length > 1;
 }
 
 function moveCue(step) {
@@ -740,20 +895,47 @@ function renderInsights() {
 // 原文 / 注音 / 翻译 / 出处。字段里出现制表符或换行会把行拆坏，先换掉。
 function ankiExport() {
   if (!cues.length) { toast("Nothing to export.", "bad"); return; }
-  const safe = (v) => (v || "").replace(/[\t\r\n]+/g, " ").trim();
+  // 加了星就只导出加星的那些——挖词本来就是挑句子，整集几百条一股脑扔进
+  // Anki，第二天全都是要删的。一条没加星才导全部。
+  const picked = starred.size
+    ? cues.map((c, i) => ({ c, i })).filter((x) => starred.has(x.i)).map((x) => x.c)
+    : cues;
 
-  const rows = cues.map((c) => {
-    const [head, ...rest] = c.text.split("\n");
-    const reading = rest.length > 1 ? rest[0] : (looksLikeReading(rest[0]) ? rest[0] : "");
-    const trans = rest.length > 1 ? rest.slice(1).join(" ") : (reading ? "" : rest[0] || "");
-    return [safe(head), safe(reading), safe(trans),
-            `${safe(currentFile)} @ ${clock(c.start)}`].join("\t");
+  const rows = picked.map((c) => {
+    const { head, reading, trans } = splitCue(c.text);
+    return [ankiField(head), ankiField(reading), ankiField(trans),
+            `${ankiField(currentFile)} @ ${clock(c.start)}`].join("\t");
   });
 
   // 头两行是 Anki 的导入指令，它会自己吃掉，不会变成卡片。
   const body = ["#separator:tab", "#html:false", ...rows].join("\n");
-  download(body, (currentFile || "subtitles").replace(/\.srt$/i, "") + "-anki.txt");
-  toast(`Exported ${rows.length} cards for Anki.`, "gold");
+  const stem = (currentFile || "subtitles").replace(/\.srt$/i, "");
+  download(body, stem + (starred.size ? "-starred" : "") + "-anki.txt");
+  toast(`Exported ${rows.length} card${rows.length > 1 ? "s" : ""}` +
+        `${starred.size ? " from your starred lines" : ""}.`, "gold");
+}
+
+// 字段里出现制表符或换行会把整行拆坏，先换掉。
+function ankiField(value) {
+  return (value || "").replace(/[\t\r\n]+/g, " ").trim();
+}
+
+// 词频榜也能直接变成卡片：词 / 注音 / 出处，再附一句你自己素材里的例句。
+// 榜上那些词是这一集反复出现的，本来就是最该先记住的。
+function wordsAnki() {
+  const words = insights?.vocabulary || [];
+  if (!words.length) { toast("No word list to export yet.", "bad"); return; }
+
+  const rows = words.map((w) => {
+    const hit = cues.find((c) => splitCue(c.text).head.includes(w.word));
+    const example = hit ? splitCue(hit.text).head : "";
+    return [ankiField(w.word), ankiField(w.reading), ankiField(example),
+            `${ankiField(currentFile)} · ${w.count}×`].join("\t");
+  });
+
+  const body = ["#separator:tab", "#html:false", ...rows].join("\n");
+  download(body, (currentFile || "subtitles").replace(/\.srt$/i, "") + "-words-anki.txt");
+  toast(`Exported ${rows.length} word cards.`, "gold");
 }
 
 function download(body, filename) {
@@ -992,7 +1174,8 @@ function applyTheme() {
   else document.documentElement.dataset.theme = resolved;
 }
 
-const THEMES = ["anki", "auto", "ink", "matcha", "sakura", "nord", "terminal"];
+const THEMES = ["anki", "auto", "ink", "matcha", "sakura", "nord", "terminal",
+                "washi", "daylight", "contrast"];
 
 // 按 t 一路换过去，比开设置面板快
 function cycleTheme() {
@@ -1001,6 +1184,19 @@ function cycleTheme() {
   applyTheme(); saveBackground();
   if (!$("settings-overlay").hidden) syncBackgroundControls();
   toast(`Theme: ${next}`);
+}
+
+// 会动的那几套背景。image 不进来——它得先有图，轮到它只会是一片空的。
+const BG_MODES = ["circuit", "stars", "petals", "plain"];
+const BG_LABELS = { circuit: "Circuit", stars: "Star field", petals: "Falling leaves",
+                    plain: "Plain", image: "Your image" };
+
+function cycleBackground() {
+  const at = BG_MODES.indexOf(bg.mode);
+  bg.mode = BG_MODES[(at + 1) % BG_MODES.length];
+  applyBackground(); saveBackground();
+  if (!$("settings-overlay").hidden) syncBackgroundControls();
+  toast(`Background: ${BG_LABELS[bg.mode] || bg.mode}`);
 }
 
 function applyBackground() {
@@ -1035,7 +1231,8 @@ function syncBackgroundControls() {
     ? "A picked image is loaded. Stored in this browser only."
     : "Stored in this browser only — it never goes near config.json.";
   $("row-bg-image").hidden = bg.mode !== "image";
-  $("row-bg-dim").hidden = bg.mode === "plain";
+  // 压暗的是图片那一层，别的模式下这根滑杆什么也不干，索性收起来
+  $("row-bg-dim").hidden = bg.mode !== "image";
 }
 
 function wireBackground() {

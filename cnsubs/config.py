@@ -46,6 +46,11 @@ SHARED_DEFAULTS = {
     "prefer_existing_subs": True,
     "allow_auto_subs": False,    # 自动生成的字幕通常还不如自己转写
 
+    # 音乐模式：先用 Demucs 把人声从伴奏里分出来，再用更短的分段和面向
+    # 歌词的提示词去转写。唱腔本来就把声调抹平了，伴奏再一压，Whisper
+    # 就只能靠猜——把伴奏去掉，猜的成分能少一大截。
+    "music_mode": False,
+
     "reading": False,            # 每条字幕下面加一行拼音／假名
     "translate": False,          # 每条字幕下面加一行英文
 
@@ -166,6 +171,9 @@ def active(cfg: dict) -> dict:
     flat["whisper_language"] = spec["whisper_language"]
     flat["sub_codes"] = spec["sub_codes"]
     flat["language_name"] = spec["name"]
+    # 提示词是可以在设置里改的，音乐模式那条不行——它跟着语言走，
+    # 只在音乐模式真正启用时才顶上来。
+    flat["music_prompt"] = spec.get("music_prompt") or flat.get("prompt", "")
     if not spec["has_script_variant"]:
         flat["script_variant"] = ""      # 对日文做简繁转换会把汉字弄坏
     return flat

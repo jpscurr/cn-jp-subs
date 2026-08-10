@@ -8,6 +8,7 @@
     --lang zh|ja                  目标语言，各自有独立的输出目录
     --reading / --no-reading      每条字幕下加一行拼音（中文）或假名（日文）
     --translate / --no-translate  每条字幕下加一行英文
+    --music / --no-music          音乐模式：先把人声从伴奏里分出来再转写
     --model 名称                  指定 whisper 模型
     --turbo                       等同于 --model whisper-large-v3-turbo
     --force                       忽略"已处理过"的记录
@@ -34,6 +35,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--translate", dest="translate", action="store_true", default=None,
                         help="add an English line under each subtitle")
     parser.add_argument("--no-translate", dest="translate", action="store_false")
+    parser.add_argument("--music", dest="music_mode", action="store_true", default=None,
+                        help="split the vocals off the backing track first (needs demucs)")
+    parser.add_argument("--no-music", dest="music_mode", action="store_false")
     parser.add_argument("--model", help="whisper model name")
     parser.add_argument("--turbo", action="store_true", help="use whisper-large-v3-turbo")
     parser.add_argument("--force", action="store_true", help="reprocess links already handled")
@@ -48,6 +52,8 @@ def resolve_config(args) -> dict:
         cfg["reading"] = args.reading
     if args.translate is not None:
         cfg["translate"] = args.translate
+    if args.music_mode is not None:
+        cfg["music_mode"] = args.music_mode
     if args.turbo:
         cfg["model"] = "whisper-large-v3-turbo"
     if args.model:
